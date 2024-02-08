@@ -88,6 +88,24 @@ export class FormatService implements OnModuleInit {
     }
 
     public formatResponse(asset: Asset) {
+        const meta = {
+            origin: asset.origin,
+            quality: asset.quality,
+            rarity: asset.rarity,
+            a: asset.assetId,
+            d: asset.d,
+            paintseed: asset.paintSeed,
+            defindex: asset.defIndex,
+            paintindex: asset.paintIndex,
+            itemid: asset.assetId,
+            floatid: asset.assetId,
+            floatvalue: asset.paintWear,
+            rarity_name: this.rarities[asset.rarity],
+            quality_name: this.qualities[asset.quality],
+            origin_name: this.origins[asset.origin],
+            s: asset.ms.startsWith('7656') ? asset.ms : '0',
+            m: asset.ms.startsWith('7656') ? '0' : asset.ms,
+        }
         const weapon = this.schema.weapons[asset.defIndex]
 
         if (!weapon) {
@@ -96,28 +114,13 @@ export class FormatService implements OnModuleInit {
 
                 return {
                     iteminfo: {
-                        origin: asset.origin,
-                        quality: asset.quality,
-                        rarity: asset.rarity,
-                        a: asset.assetId,
-                        d: asset.d,
-                        paintseed: asset.paintSeed,
-                        defindex: asset.defIndex,
-                        paintindex: asset.paintIndex,
+                        ...meta,
                         stickers: [],
-                        itemid: asset.assetId,
-                        floatid: asset.assetId,
-                        floatvalue: asset.paintWear,
-                        s: asset.ms.startsWith('7656') ? asset.ms : '0',
-                        m: asset.ms.startsWith('7656') ? '0' : asset.ms,
                         imageurl: '',
                         min: 0,
                         max: 0,
                         weapon_type: 'Sticker',
                         item_name: 'Sticker',
-                        rarity_name: this.rarities[asset.rarity],
-                        quality_name: this.qualities[asset.quality],
-                        origin_name: this.origins[asset.origin],
                         wear_name: '',
                         full_item_name:
                             this.schema.stickers[asset.stickers[0].sticker_id]
@@ -131,14 +134,7 @@ export class FormatService implements OnModuleInit {
 
                 return {
                     iteminfo: {
-                        origin: asset.origin,
-                        quality: asset.quality,
-                        rarity: asset.rarity,
-                        a: asset.assetId,
-                        d: asset.d,
-                        paintseed: asset.paintSeed,
-                        defindex: asset.defIndex,
-                        paintindex: asset.paintIndex,
+                        ...meta,
                         stickers: asset.stickers.map((sticker) => ({
                             stickerId: sticker.sticker_id,
                             slot: sticker.slot,
@@ -151,19 +147,11 @@ export class FormatService implements OnModuleInit {
                                 sticker.sticker_id
                             ].market_hash_name.replace('Patch | ', ''),
                         })),
-                        itemid: asset.assetId,
-                        floatid: asset.assetId,
-                        floatvalue: asset.paintWear,
-                        s: asset.ms.startsWith('7656') ? asset.ms : '0',
-                        m: asset.ms.startsWith('7656') ? '0' : asset.ms,
                         imageurl: agent.image,
                         min: 0,
                         max: 0,
                         weapon_type: 'Agent',
                         item_name: agent.market_hash_name.split(' | ')[0],
-                        rarity_name: this.rarities[asset.rarity],
-                        quality_name: this.qualities[asset.quality],
-                        origin_name: this.origins[asset.origin],
                         wear_name: '',
                         full_item_name: agent.market_hash_name,
                     },
@@ -171,14 +159,7 @@ export class FormatService implements OnModuleInit {
             } else if (asset.defIndex === 1349) {
                 return {
                     iteminfo: {
-                        origin: asset.origin,
-                        quality: asset.quality,
-                        rarity: asset.rarity,
-                        a: asset.assetId,
-                        d: asset.d,
-                        paintseed: asset.paintSeed,
-                        defindex: asset.defIndex,
-                        paintindex: asset.paintIndex,
+                        ...meta,
                         stickers: asset.stickers.map((sticker) => ({
                             stickerId: sticker.sticker_id,
                             slot: sticker.slot,
@@ -189,19 +170,11 @@ export class FormatService implements OnModuleInit {
                             scale: sticker.scale,
                             name: sticker.sticker_id,
                         })),
-                        itemid: asset.assetId,
-                        floatid: asset.assetId,
-                        floatvalue: asset.paintWear,
-                        s: asset.ms.startsWith('7656') ? asset.ms : '0',
-                        m: asset.ms.startsWith('7656') ? '0' : asset.ms,
                         imageurl: '',
                         min: 0,
                         max: 0,
                         weapon_type: 'Graffiti',
                         item_name: 'Graffiti',
-                        rarity_name: this.rarities[asset.rarity],
-                        quality_name: this.qualities[asset.quality],
-                        origin_name: this.origins[asset.origin],
                         wear_name: '',
                         full_item_name: 'Graffiti',
                     },
@@ -222,14 +195,7 @@ export class FormatService implements OnModuleInit {
         }
         return {
             iteminfo: {
-                origin: asset.origin,
-                quality: asset.quality,
-                rarity: asset.rarity,
-                a: asset.assetId,
-                d: asset.d,
-                paintseed: asset.paintSeed,
-                defindex: asset.defIndex,
-                paintindex: asset.paintIndex,
+                ...meta,
                 stickers: asset.stickers.map((sticker) => ({
                     stickerId: sticker.sticker_id,
                     slot: sticker.slot,
@@ -242,19 +208,11 @@ export class FormatService implements OnModuleInit {
                         sticker.sticker_id
                     ].market_hash_name.replace('Sticker | ', ''),
                 })),
-                itemid: asset.assetId,
-                floatid: asset.assetId,
-                floatvalue: asset.paintWear,
-                s: asset.ms.startsWith('7656') ? asset.ms : '0',
-                m: asset.ms.startsWith('7656') ? '0' : asset.ms,
                 imageurl: paint.image,
                 min: paint.min,
                 max: paint.max,
                 weapon_type: weapon.name,
                 item_name: paint.name,
-                rarity_name: this.rarities[asset.rarity],
-                quality_name: this.qualities[asset.quality],
-                origin_name: this.origins[asset.origin],
                 wear_name: wear,
                 full_item_name,
             },
