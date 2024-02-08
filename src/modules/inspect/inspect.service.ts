@@ -108,15 +108,15 @@ export class InspectService implements OnModuleInit {
             onhold: this.onhold.length,
             pending: Object.keys(this.promises).length,
             success: {
-                rate: this.success / (this.success + this.failed),
+                rate: this.success / (this.success + this.failed + this.cached),
                 count: this.success,
             },
             cached: {
-                rate: this.cached / (this.success + this.failed),
+                rate: this.cached / (this.success + this.failed + this.cached),
                 count: this.cached,
             },
             failed: {
-                rate: this.failed / (this.success + this.failed),
+                rate: this.failed / (this.success + this.failed + this.cached),
                 count: this.failed,
             },
             requests: this.requests,
