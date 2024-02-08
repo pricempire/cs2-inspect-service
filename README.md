@@ -16,6 +16,43 @@ Then, you can install the dependencies using the following command:
 $ pnpm install
 ```
 
+## Deployment
+
+You can deploy the server using the following command:
+
+```bash
+$ pnpm run build
+```
+
+The server will be built in the `dist` directory. You can run the server using the following command:
+
+```bash
+$ node dist/main.js
+```
+
+You can also use the following command to run the server:
+
+```bash
+$ pnpm run deploy
+```
+
+This will build and run the server in one command with PM2.
+
+## Docker
+
+You can also run the server using Docker. You can build the Docker image using the following command:
+
+```bash
+$ docker build -t cs2-inspect-server .
+```
+
+Then, you can run the Docker container using the following command:
+
+```bash
+$ docker run -p 3000:3000 -d cs2-inspect-server
+```
+
+
 ## Configuration
 
 The server is configured to run on port 3000. If you want to change the port, you can do so by modifying the `PORT` environment variable in the `.env` file. 
