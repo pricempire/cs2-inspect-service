@@ -5,5 +5,6 @@ import { PricempireService } from './pricempire.service'
 @Module({
     imports: [HttpModule],
     providers: [PricempireService],
+    exports: [PricempireService],
 })
 export class PricempireModule {}
