@@ -58,7 +58,17 @@ export class InspectService implements OnModuleInit {
         this.logger.debug('Starting Inspect Module...')
 
         this.logger.debug('Loading accounts.txt...')
-        const accounts = fs.readFileSync('accounts.txt', 'utf8').split('\n')
+
+        let accounts = []
+
+        if (fs.existsSync('accounts.txt')) {
+            accounts = fs.readFileSync('accounts.txt', 'utf8').split('\n')
+        } else if (fs.existsSync('../accounts.txt')) {
+            accounts = fs.readFileSync('../accounts.txt', 'utf8').split('\n')
+        } else {
+            throw new Error('accounts.txt not found')
+        }
+
         this.logger.debug('Loaded accounts.txt')
 
         this.logger.debug(`Found ${accounts.length} accounts`)
