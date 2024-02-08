@@ -36,7 +36,10 @@ export class ImportModule implements OnModuleInit {
 
     async onModuleInit() {
         this.logger.debug('Importing data from source to target')
-        await this.import()
+
+        setTimeout(() => {
+            this.import()
+        }, 5000)
     }
 
     private async import() {
