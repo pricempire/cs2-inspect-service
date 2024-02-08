@@ -234,6 +234,28 @@ $ curl -X GET -H "Content-Type: application/json" http://localhost:3000/?url=ste
 }
 ```
 
+## Importing the data from old CSFloat database
+
+You can import the data from the old CSFloat database using the following command:
+
+```bash
+$ pnpm run import
+```
+
+Dont forget to set the `POSTGRESQL_HOST_SOURCE`, `POSTGRESQL_PORT_SOURCE`, `POSTGRESQL_USER_SOURCE`, `POSTGRESQL_PASSWORD_SOURCE`, `POSTGRESQL_DB_SOURCE` environment variables in the `.env` file.
+
+```bash
+# .env
+POSTGRESQL_HOST_SOURCE=
+POSTGRESQL_PORT_SOURCE=
+POSTGRESQL_USER_SOURCE=
+POSTGRESQL_PASSWORD_SOURCE=
+POSTGRESQL_DB_SOURCE=
+```
+
+This will import the data from the old CSFloat database to the new database.
+
+
 # Contributing
 
 If you want to contribute to the project, you can do so by creating a pull request.

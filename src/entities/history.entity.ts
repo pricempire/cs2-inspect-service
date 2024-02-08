@@ -36,13 +36,16 @@ export class History {
     @Column()
     type: HistoryType
 
-    @Column()
-    owner: string
+    @Column({
+        type: 'bigint',
+    })
+    owner: number
 
     @Column({
+        type: 'bigint',
         nullable: true,
     })
-    prevOwner: string
+    prevOwner: number
 
     @Column()
     d: string

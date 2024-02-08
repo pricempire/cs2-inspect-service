@@ -32,8 +32,10 @@ export class Asset {
     })
     assetId: number
 
-    @Column()
-    ms: string
+    @Column({
+        type: 'bigint',
+    })
+    ms: number
 
     @Column()
     d: string
