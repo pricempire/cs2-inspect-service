@@ -60,9 +60,9 @@ export class ImportModule implements OnModuleInit {
                 await this.toDataSource.query(
                     `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
                     [
-                        item.ms,
-                        item.a,
-                        item.d,
+                        this.signedToUn(item.ms),
+                        this.signedToUn(item.a),
+                        this.signedToUn(item.d),
                         item.paintseed,
                         float,
                         item.defindex,
@@ -112,5 +112,9 @@ export class ImportModule implements OnModuleInit {
 
             this.logger.debug('Imported History ' + offset + ' items')
         }
+    }
+    private signedToUn(num) {
+        const mask = 1n << 63n
+        return (BigInt(num) + mask) ^ mask
     }
 }
