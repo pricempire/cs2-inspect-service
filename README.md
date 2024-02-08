@@ -63,7 +63,7 @@ You can share the data with Pricempire by setting the `PING_PRICEMPIRE` environm
 PING_PRICEMPIRE=true
 ```
 
-### Refresh Stickers
+### Refresh Stickers
 
 You can refresh the stickers by setting the `ALLOW_REFRESH` environment variable to `true`. 
 
