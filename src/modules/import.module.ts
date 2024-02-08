@@ -50,7 +50,7 @@ export class ImportModule implements OnModuleInit {
         let offset = 0
         while (offset < count[0].count) {
             const items = await this.fromDataSource.query(
-                `SELECT * FROM "items" ORDER BY id LIMIT ${this.limit} OFFSET ${offset}`,
+                `SELECT * FROM "items" ORDER BY floatid LIMIT ${this.limit} OFFSET ${offset}`,
             )
 
             for await (const item of items) {
