@@ -15,6 +15,7 @@ import { History } from 'src/entities/history.entity'
 import { Repository } from 'typeorm'
 import { FormatService } from './format.service'
 import { HistoryType } from 'src/entities/history.entity'
+import { PricempireService } from '../pricempire/pricempire.service'
 
 @Injectable()
 export class InspectService implements OnModuleInit {
@@ -50,6 +51,7 @@ export class InspectService implements OnModuleInit {
         private assetRepository: Repository<Asset>,
         @InjectRepository(History)
         private historyRepository: Repository<History>,
+        private readonly pricempireService: PricempireService,
     ) {}
 
     async onModuleInit() {
@@ -78,6 +80,17 @@ export class InspectService implements OnModuleInit {
         url?: string
     }) {
         const { s, a, d, m } = this.parseService.parse(query)
+
+        // Ping pricempire
+        if (process.env.PING_PRICEMPIRE === 'true') {
+            // no need async here because we don't care about the response
+            this.pricempireService.ping({
+                s,
+                a,
+                d,
+                m,
+            })
+        }
 
         const asset = await this.assetRepository.findOne({
             where: {

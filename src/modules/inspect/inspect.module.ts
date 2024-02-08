@@ -6,9 +6,10 @@ import { TypeOrmModule } from '@nestjs/typeorm'
 import { Asset } from 'src/entities/asset.entity'
 import { History } from 'src/entities/history.entity'
 import { FormatService } from './format.service'
+import { PricempireModule } from '../pricempire/pricempire.module'
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Asset, History])],
+    imports: [TypeOrmModule.forFeature([Asset, History]), PricempireModule],
     providers: [InspectService, ParseService, FormatService],
     controllers: [InspectController],
 })
