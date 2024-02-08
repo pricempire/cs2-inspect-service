@@ -155,7 +155,9 @@ export class InspectService implements OnModuleInit {
             })
             if (asset) {
                 this.cached++
-                return Promise.resolve(this.formatService.formatResponse(asset))
+                return Promise.resolve(
+                    await this.formatService.formatResponse(asset),
+                )
             }
         } else if (process.env.ALLOW_REFRESH === 'false') {
             throw new HttpException(
@@ -415,7 +417,7 @@ export class InspectService implements OnModuleInit {
                 this.success++
 
                 return this.promises[username](
-                    this.formatService.formatResponse(asset),
+                    await this.formatService.formatResponse(asset),
                 )
             } catch (e) {
                 console.log(e)

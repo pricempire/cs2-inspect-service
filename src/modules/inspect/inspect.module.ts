@@ -8,10 +8,11 @@ import { History } from 'src/entities/history.entity'
 import { FormatService } from './format.service'
 import { PricempireModule } from '../pricempire/pricempire.module'
 import { HttpModule } from '@nestjs/axios'
+import { Rankings } from 'src/views/rankings.view'
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Asset, History]),
+        TypeOrmModule.forFeature([Asset, History, Rankings]),
         PricempireModule,
         HttpModule,
     ],

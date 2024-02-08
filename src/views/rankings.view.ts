@@ -5,8 +5,10 @@ import { ViewEntity, ViewColumn } from 'typeorm'
     synchronize: true,
     expression: `
         SELECT 
-            DENSE_RANK() OVER(ORDER BY "paintWear" DESC) AS "globalRank",
-            DENSE_RANK() OVER(PARTITION BY "paintIndex", "defIndex", "isStattrak", "isSouvenir" ORDER BY "paintWear" DESC) AS "rank",
+            DENSE_RANK() OVER(ORDER BY "paintWear" DESC) AS "globalLow",
+            DENSE_RANK() OVER(ORDER BY "paintWear" ASC) AS "globalHigh",
+            DENSE_RANK() OVER(PARTITION BY "paintIndex", "defIndex", "isStattrak", "isSouvenir" ORDER BY "paintWear" DESC) AS "lowRank",
+            DENSE_RANK() OVER(PARTITION BY "paintIndex", "defIndex", "isStattrak", "isSouvenir" ORDER BY "paintWear" ASC) AS "highRank",
             "assetId"
         FROM asset
         WHERE "paintWear" IS NOT NULL AND "paintWear" > 0
@@ -14,10 +16,16 @@ import { ViewEntity, ViewColumn } from 'typeorm'
 })
 export class Rankings {
     @ViewColumn()
-    globalRank: number
+    globalLow: number
 
     @ViewColumn()
-    rank: number
+    globalHigh: number
+
+    @ViewColumn()
+    lowRank: number
+
+    @ViewColumn()
+    highRank: number
 
     @ViewColumn()
     assetId: number

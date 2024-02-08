@@ -6,8 +6,11 @@ import {
     Logger,
     OnModuleInit,
 } from '@nestjs/common'
+import { InjectRepository } from '@nestjs/typeorm'
 import { firstValueFrom } from 'rxjs'
 import { Asset } from 'src/entities/asset.entity'
+import { Rankings } from 'src/views/rankings.view'
+import { Repository } from 'typeorm'
 
 @Injectable()
 export class FormatService implements OnModuleInit {
@@ -69,7 +72,11 @@ export class FormatService implements OnModuleInit {
         24: 'Level Up Reward',
     }
 
-    constructor(private httpService: HttpService) {}
+    constructor(
+        private httpService: HttpService,
+        @InjectRepository(Rankings)
+        private rankingRepository: Repository<Rankings>,
+    ) {}
 
     async onModuleInit() {
         this.logger.debug('Loading schema...')
@@ -88,7 +95,13 @@ export class FormatService implements OnModuleInit {
         this.logger.debug('Schema loaded')
     }
 
-    public formatResponse(asset: Asset) {
+    public async formatResponse(asset: Asset) {
+        const rank = await this.rankingRepository.findOne({
+            where: {
+                assetId: asset.assetId,
+            },
+        })
+
         const meta = {
             origin: asset.origin,
             quality: asset.quality,
@@ -106,6 +119,10 @@ export class FormatService implements OnModuleInit {
             origin_name: this.origins[asset.origin],
             s: asset.ms.startsWith('7656') ? asset.ms : '0',
             m: asset.ms.startsWith('7656') ? '0' : asset.ms,
+            low_rank: rank?.lowRank,
+            high_rank: rank?.highRank,
+            global_low: rank?.globalLow,
+            global_high: rank?.globalHigh,
         }
 
         const weapon = this.schema.weapons[asset.defIndex]
