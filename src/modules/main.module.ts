@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { InspectModule } from './inspect/inspect.module'
 import 'dotenv/config'
+import { ScheduleModule } from '@nestjs/schedule'
 
 @Module({
     imports: [
@@ -27,6 +28,7 @@ import 'dotenv/config'
             synchronize: true,
         }),
         InspectModule,
+        ScheduleModule.forRoot(),
     ],
 })
 export class MainModule {}
