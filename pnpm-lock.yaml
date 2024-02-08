@@ -28,6 +28,9 @@ devDependencies:
   '@nestjs/config':
     specifier: ^3.2.0
     version: 3.2.0(@nestjs/common@10.3.2)(rxjs@7.8.1)
+  '@nestjs/schedule':
+    specifier: ^4.0.1
+    version: 4.0.1(@nestjs/common@10.3.2)(@nestjs/core@10.3.2)
   '@nestjs/schematics':
     specifier: ^10.1.1
     version: 10.1.1(chokidar@3.6.0)(typescript@5.3.3)
@@ -1034,6 +1037,18 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
+  /@nestjs/schedule@4.0.1(@nestjs/common@10.3.2)(@nestjs/core@10.3.2):
+    resolution: {integrity: sha512-cz2FNjsuoma+aGsG0cMmG6Dqg/BezbBWet1UTHtAuu6d2mXNTVcmoEQM2DIVG5Lfwb2hfSE2yZt8Moww+7y+mA==}
+    peerDependencies:
+      '@nestjs/common': ^8.0.0 || ^9.0.0 || ^10.0.0
+      '@nestjs/core': ^8.0.0 || ^9.0.0 || ^10.0.0
+    dependencies:
+      '@nestjs/common': 10.3.2(reflect-metadata@0.2.1)(rxjs@7.8.1)
+      '@nestjs/core': 10.3.2(@nestjs/common@10.3.2)(@nestjs/platform-express@10.3.2)(reflect-metadata@0.2.1)(rxjs@7.8.1)
+      cron: 3.1.6
+      uuid: 9.0.1
+    dev: true
+
   /@nestjs/schematics@10.1.1(chokidar@3.6.0)(typescript@5.3.3):
     resolution: {integrity: sha512-o4lfCnEeIkfJhGBbLZxTuVWcGuqDCFwg5OrvpgRUBM7vI/vONvKKiB5riVNpO+JqXoH0I42NNeDb0m4V5RREig==}
     peerDependencies:
@@ -1378,6 +1393,10 @@ packages:
 
   /@types/long@4.0.2:
     resolution: {integrity: sha512-MqTGEo5bj5t157U6fA/BiDynNkn0YknVdh48CMPkTSpFTVmvao5UQmm7uEF6xBEo7qIMAlY/JSleYaE6VOdpaA==}
+    dev: true
+
+  /@types/luxon@3.3.8:
+    resolution: {integrity: sha512-jYvz8UMLDgy3a5SkGJne8H7VA7zPV2Lwohjx0V8V31+SqAjNmurWMkk9cQhfvlcnXWudBpK9xPM1n4rljOcHYQ==}
     dev: true
 
   /@types/methods@1.1.4:
@@ -2427,6 +2446,13 @@ packages:
 
   /create-require@1.1.1:
     resolution: {integrity: sha512-dcKFX3jn0MpIaXjisoRvexIJVEKzaq7z2rZKxf+MSr9TkdmHmsU4m2lcLojrj/FHl8mk5VxMmYA+ftRkP/3oKQ==}
+    dev: true
+
+  /cron@3.1.6:
+    resolution: {integrity: sha512-cvFiQCeVzsA+QPM6fhjBtlKGij7tLLISnTSvFxVdnFGLdz+ZdXN37kNe0i2gefmdD17XuZA6n2uPVwzl4FxW/w==}
+    dependencies:
+      '@types/luxon': 3.3.8
+      luxon: 3.4.4
     dev: true
 
   /cross-spawn@7.0.3:
@@ -4125,6 +4151,11 @@ packages:
     engines: {node: '>=10'}
     dependencies:
       yallist: 4.0.0
+    dev: true
+
+  /luxon@3.4.4:
+    resolution: {integrity: sha512-zobTr7akeGHnv7eBOXcRgMeCP6+uyYsczwmeRCauvpvaAltgNyTbLH/+VaEAPUeWBT+1GuNmz4wC/6jtQzbbVA==}
+    engines: {node: '>=12'}
     dev: true
 
   /lzma@2.3.2:

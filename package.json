@@ -30,6 +30,7 @@
     "@nestjs/axios": "^3.0.2",
     "@nestjs/cli": "^10.3.2",
     "@nestjs/config": "^3.2.0",
+    "@nestjs/schedule": "^4.0.1",
     "@nestjs/schematics": "^10.1.1",
     "@nestjs/testing": "^10.3.2",
     "@nestjs/typeorm": "^10.0.2",

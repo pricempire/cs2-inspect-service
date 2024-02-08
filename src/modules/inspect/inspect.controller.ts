@@ -5,7 +5,7 @@ import { InspectService } from './inspect.service'
 export class InspectController {
     constructor(private readonly inspectService: InspectService) {}
 
-    @Get()
+    @Get(['', 'inspect', 'inspect/'])
     async inspect(
         @Query()
         query: {
@@ -18,5 +18,10 @@ export class InspectController {
         },
     ) {
         return await this.inspectService.inspectItem(query)
+    }
+
+    @Get('stats')
+    async stats() {
+        return this.inspectService.stats()
     }
 }

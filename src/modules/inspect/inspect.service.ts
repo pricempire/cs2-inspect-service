@@ -17,6 +17,7 @@ import { FormatService } from './format.service'
 import { HistoryType } from 'src/entities/history.entity'
 import { PricempireService } from '../pricempire/pricempire.service'
 import { HttpService } from '@nestjs/axios'
+import { Cron } from '@nestjs/schedule'
 
 @Injectable()
 export class InspectService implements OnModuleInit {
@@ -43,6 +44,13 @@ export class InspectService implements OnModuleInit {
     private onhold = []
     private inspects = {}
     private nextBot = 0
+
+    private requests = []
+    private currentRequests = 0
+
+    private success = 0
+    private cached = 0
+    private failed = 0
 
     private inspectTimeout = 3 * 1000 // 10 seconds
     private onHoldTimeout = 60 * 1000 // 10 seconds
@@ -82,6 +90,39 @@ export class InspectService implements OnModuleInit {
         }
     }
 
+    @Cron('* * * * * *')
+    async seconds() {
+        this.requests.push(this.currentRequests)
+
+        this.currentRequests = 0
+
+        if (this.requests.length > 60) {
+            this.requests.shift()
+        }
+    }
+
+    public stats() {
+        return {
+            ready: this.ready.length,
+            busy: this.busy.length,
+            onhold: this.onhold.length,
+            pending: Object.keys(this.promises).length,
+            success: {
+                rate: this.success / (this.success + this.failed),
+                count: this.success,
+            },
+            cached: {
+                rate: this.cached / (this.success + this.failed),
+                count: this.cached,
+            },
+            failed: {
+                rate: this.failed / (this.success + this.failed),
+                count: this.failed,
+            },
+            requests: this.requests,
+        }
+    }
+
     public async inspectItem(query: {
         s?: string
         a?: string
@@ -90,6 +131,8 @@ export class InspectService implements OnModuleInit {
         url?: string
         refresh?: string // reload from GC instead of cache (optional), used for reload stickers usually
     }) {
+        this.currentRequests++
+
         const { s, a, d, m } = this.parseService.parse(query)
 
         // Ping pricempire
@@ -111,6 +154,7 @@ export class InspectService implements OnModuleInit {
                 },
             })
             if (asset) {
+                this.cached++
                 return Promise.resolve(this.formatService.formatResponse(asset))
             }
         } else if (process.env.ALLOW_REFRESH === 'false') {
@@ -147,6 +191,9 @@ export class InspectService implements OnModuleInit {
                     `${username} is busy or on hold, trying another bot`,
                 )
             }
+            await new Promise((resolve) => {
+                setTimeout(resolve, 500) // wait 500ms and try again
+            })
             return this.inspectItem(query) // try again with another bot
         }
 
@@ -178,6 +225,8 @@ export class InspectService implements OnModuleInit {
                 this.busy.splice(this.busy.indexOf(username), 1)
 
                 this.onhold[username] = true
+
+                this.failed++
 
                 setTimeout(() => {
                     this.onhold[username] = false
@@ -362,6 +411,8 @@ export class InspectService implements OnModuleInit {
                 })
 
                 delete this.inspects[response.itemid]
+
+                this.success++
 
                 return this.promises[username](
                     this.formatService.formatResponse(asset),
