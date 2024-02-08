@@ -88,6 +88,7 @@ export class InspectService implements OnModuleInit {
         d?: string
         m?: string
         url?: string
+        refresh?: string // reload from GC instead of cache (optional), used for reload stickers usually
     }) {
         const { s, a, d, m } = this.parseService.parse(query)
 
@@ -102,15 +103,21 @@ export class InspectService implements OnModuleInit {
             })
         }
 
-        const asset = await this.assetRepository.findOne({
-            where: {
-                assetId: parseInt(a),
-                d,
-            },
-        })
-
-        if (asset) {
-            return Promise.resolve(this.formatService.formatResponse(asset))
+        if (query.refresh !== 'true') {
+            const asset = await this.assetRepository.findOne({
+                where: {
+                    assetId: parseInt(a),
+                    d,
+                },
+            })
+            if (asset) {
+                return Promise.resolve(this.formatService.formatResponse(asset))
+            }
+        } else if (process.env.ALLOW_REFRESH === 'false') {
+            throw new HttpException(
+                'Refresh is not allowed',
+                HttpStatus.FORBIDDEN,
+            )
         }
 
         this.inspects[a] = {

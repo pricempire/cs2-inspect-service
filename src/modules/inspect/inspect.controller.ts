@@ -14,6 +14,7 @@ export class InspectController {
             d?: string
             m?: string
             url?: string
+            refresh?: string
         },
     ) {
         return await this.inspectService.inspectItem(query)

@@ -55,6 +55,29 @@ The server uses a proxy to connect to the internet. The proxy is configured usin
 PROXY_URL=[socks5|http]://[username][session]:[password]@[url]:[port]
 ```
 
+### Ping Pricempire
+
+You can share the data with Pricempire by setting the `PING_PRICEMPIRE` environment variable to `true`. 
+
+```bash
+PING_PRICEMPIRE=true
+```
+
+### Refresh Stickers
+
+You can refresh the stickers by setting the `ALLOW_REFRESH` environment variable to `true`. 
+
+```bash
+ALLOW_REFRESH=true
+```
+
+Pass `true` to the `refresh` query parameter to refresh the stickers. (This will only work if `ALLOW_REFRESH` is set to `true`) (Do not recommended to spam the endpoint with refresh requests, as it will result in a ban by the GC.)
+
+```bash
+$ curl -X GET -H "Content-Type: application/json" http://localhost:3000/?url=steam://rungame/730/76561202255233023/+csgo_econ_action_preview%20S76561198023809011A35678726741D4649654965632117657&refresh=true
+```
+
+
 ### Logging
 
 You can enable logging for the PostgreSQL database by setting the `POSTGRESQL_LOGGING` environment variable to `true`. 
