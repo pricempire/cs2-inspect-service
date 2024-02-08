@@ -38,6 +38,7 @@ export class InspectService implements OnModuleInit {
     private busy = []
     private onhold = []
     private inspects = {}
+    private nextBot = 0
 
     private inspectTimeout = 3 * 1000 // 10 seconds
     private onHoldTimeout = 60 * 1000 // 10 seconds
@@ -78,18 +79,16 @@ export class InspectService implements OnModuleInit {
     }) {
         const { s, a, d, m } = this.parseService.parse(query)
 
-        // const asset = await this.assetRepository.findOne({
-        //     where: {
-        //         assetId: parseInt(a),
-        //         d,
-        //     },
-        // })
-        //
-        // if (asset) {
-        //     return Promise.resolve(this.formatItem(asset))
-        // }
+        const asset = await this.assetRepository.findOne({
+            where: {
+                assetId: parseInt(a),
+                d,
+            },
+        })
 
-        console.log('Inspecting', m || s, a, d)
+        if (asset) {
+            return Promise.resolve(this.formatItem(asset))
+        }
 
         this.inspects[a] = {
             ms: m !== '0' ? m : s,
@@ -105,8 +104,21 @@ export class InspectService implements OnModuleInit {
                 HttpStatus.FAILED_DEPENDENCY,
             )
         }
-        const username =
-            this.ready[Math.floor(Math.random() * this.ready.length)]
+
+        const username = this.ready[this.nextBot++ % this.ready.length] // Round Robin
+
+        if (this.nextBot >= this.ready.length) {
+            this.nextBot = 0
+        }
+
+        if (this.busy.includes(username) || this.onhold[username]) {
+            if (process.env.GC_DEBUG === 'true') {
+                this.logger.error(
+                    `${username} is busy or on hold, trying another bot`,
+                )
+            }
+            return this.inspectItem(query) // try again with another bot
+        }
 
         this.busy.push(username)
 
@@ -242,7 +254,7 @@ export class InspectService implements OnModuleInit {
                         },
                     )
                 } else {
-                    this.logger.debug(`${username} Initiating GC Connection`)
+                    this.logger.debug(`${username}: Initiating GC Connection`)
                     this.steamUsers[username].gamesPlayed([730], true)
                 }
             })
@@ -353,6 +365,7 @@ export class InspectService implements OnModuleInit {
             this.logger.debug(
                 `${username}: CS2 unready (${reason}), trying to reconnect!`,
             )
+            this.initBot(username, this.args[username].password)
         })
 
         this.cs2Instances[username].on('connectionStatus', (status) => {
