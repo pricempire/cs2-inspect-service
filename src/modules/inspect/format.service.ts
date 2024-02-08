@@ -106,6 +106,7 @@ export class FormatService implements OnModuleInit {
             s: asset.ms.startsWith('7656') ? asset.ms : '0',
             m: asset.ms.startsWith('7656') ? '0' : asset.ms,
         }
+
         const weapon = this.schema.weapons[asset.defIndex]
 
         if (!weapon) {
