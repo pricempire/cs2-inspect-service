@@ -30,7 +30,7 @@ export class ImportModule implements OnModuleInit {
     private limit = 1000
 
     constructor(
-        @InjectDataSource('from') private fromDataSource: DataSource,
+        @InjectDataSource('source') private fromDataSource: DataSource,
         @InjectDataSource('to') private toDataSource: DataSource,
     ) {}
 
