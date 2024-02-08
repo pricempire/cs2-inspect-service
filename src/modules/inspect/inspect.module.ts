@@ -7,9 +7,14 @@ import { Asset } from 'src/entities/asset.entity'
 import { History } from 'src/entities/history.entity'
 import { FormatService } from './format.service'
 import { PricempireModule } from '../pricempire/pricempire.module'
+import { HttpModule } from '@nestjs/axios'
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Asset, History]), PricempireModule],
+    imports: [
+        TypeOrmModule.forFeature([Asset, History]),
+        PricempireModule,
+        HttpModule,
+    ],
     providers: [InspectService, ParseService, FormatService],
     controllers: [InspectController],
 })

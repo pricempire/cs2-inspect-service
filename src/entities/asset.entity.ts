@@ -57,6 +57,11 @@ export class Asset {
     paintWear: number
 
     @Column({
+        type: 'smallint',
+    })
+    quality: number
+
+    @Column({
         nullable: true,
         length: 64,
     })

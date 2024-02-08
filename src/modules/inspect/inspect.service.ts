@@ -16,6 +16,7 @@ import { Repository } from 'typeorm'
 import { FormatService } from './format.service'
 import { HistoryType } from 'src/entities/history.entity'
 import { PricempireService } from '../pricempire/pricempire.service'
+import { HttpService } from '@nestjs/axios'
 
 @Injectable()
 export class InspectService implements OnModuleInit {
@@ -29,6 +30,8 @@ export class InspectService implements OnModuleInit {
         65: 'Account login denied due to auth code being invalid',
         66: 'Account login denied due to 2nd factor auth failure and no mail has been sent',
     }
+
+    private schema
 
     private steamUsers = {}
     private cs2Instances = {}
@@ -52,12 +55,11 @@ export class InspectService implements OnModuleInit {
         @InjectRepository(History)
         private historyRepository: Repository<History>,
         private readonly pricempireService: PricempireService,
+        private readonly httpService: HttpService,
     ) {}
 
     async onModuleInit() {
         this.logger.debug('Starting Inspect Module...')
-
-        this.logger.debug('Loading accounts.txt...')
 
         let accounts = []
 
@@ -68,8 +70,6 @@ export class InspectService implements OnModuleInit {
         } else {
             throw new Error('accounts.txt not found')
         }
-
-        this.logger.debug('Loaded accounts.txt')
 
         this.logger.debug(`Found ${accounts.length} accounts`)
 
@@ -110,7 +110,7 @@ export class InspectService implements OnModuleInit {
         })
 
         if (asset) {
-            return Promise.resolve(this.formatItem(asset))
+            return Promise.resolve(this.formatService.formatResponse(asset))
         }
 
         this.inspects[a] = {
@@ -351,6 +351,7 @@ export class InspectService implements OnModuleInit {
                     rarity: response.rarity,
                     questId: response.questid,
                     stickers: response.stickers,
+                    quality: response.quality,
                 })
 
                 delete this.inspects[response.itemid]
@@ -471,9 +472,5 @@ export class InspectService implements OnModuleInit {
             password: password,
             rememberPassword: true,
         })
-    }
-
-    private formatItem(asset: Asset) {
-        return asset
     }
 }
