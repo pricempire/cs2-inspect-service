@@ -68,6 +68,7 @@ export class FormatService implements OnModuleInit {
         23: 'Quest Reward',
         24: 'Level Up Reward',
     }
+
     constructor(private httpService: HttpService) {}
 
     async onModuleInit() {

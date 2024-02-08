@@ -123,6 +123,7 @@ PROXY_URL=[socks5|http]://[username][session]:[password]@[url]:[port]
 POSTGRESQL_LOGGING=false
 GC_DEBUG=false
 PING_PRICEMPIRE=true
+ALLOW_REFRESH=false
 ```
 
 ## Running the server
