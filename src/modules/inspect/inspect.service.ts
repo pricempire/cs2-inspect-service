@@ -9,6 +9,12 @@ import * as SteamUser from 'steam-user'
 import * as GlobalOffensive from 'globaloffensive'
 import * as fs from 'fs'
 import { ParseService } from './parse.service'
+import { InjectRepository } from '@nestjs/typeorm'
+import { Asset } from 'src/entities/asset.entity'
+import { History } from 'src/entities/history.entity'
+import { Repository } from 'typeorm'
+import { FormatService } from './format.service'
+import { HistoryType } from 'src/entities/history.entity'
 
 @Injectable()
 export class InspectService implements OnModuleInit {
@@ -31,11 +37,19 @@ export class InspectService implements OnModuleInit {
     private ttls = {}
     private busy = []
     private onhold = []
+    private inspects = {}
 
     private inspectTimeout = 3 * 1000 // 10 seconds
     private onHoldTimeout = 60 * 1000 // 10 seconds
 
-    constructor(private parseService: ParseService) {}
+    constructor(
+        private parseService: ParseService,
+        private formatService: FormatService,
+        @InjectRepository(Asset)
+        private assetRepository: Repository<Asset>,
+        @InjectRepository(History)
+        private historyRepository: Repository<History>,
+    ) {}
 
     async onModuleInit() {
         this.logger.debug('Starting Inspect Module...')
@@ -62,6 +76,26 @@ export class InspectService implements OnModuleInit {
         m?: string
         url?: string
     }) {
+        const { s, a, d, m } = this.parseService.parse(query)
+
+        // const asset = await this.assetRepository.findOne({
+        //     where: {
+        //         assetId: parseInt(a),
+        //         d,
+        //     },
+        // })
+        //
+        // if (asset) {
+        //     return Promise.resolve(this.formatItem(asset))
+        // }
+
+        console.log('Inspecting', m || s, a, d)
+
+        this.inspects[a] = {
+            ms: m !== '0' ? m : s,
+            d,
+        }
+
         if (this.ready.length === 0) {
             if (process.env.GC_DEBUG === 'true') {
                 this.logger.error('No bots are ready')
@@ -71,9 +105,6 @@ export class InspectService implements OnModuleInit {
                 HttpStatus.FAILED_DEPENDENCY,
             )
         }
-
-        const { s, a, d, m } = this.parseService.parse(query)
-
         const username =
             this.ready[Math.floor(Math.random() * this.ready.length)]
 
@@ -90,7 +121,11 @@ export class InspectService implements OnModuleInit {
 
             if (!this.cs2Instances[username].haveGCSession) {
                 this.logger.error(`Bot ${username} doesn't have a GC Session`)
-                return this.inspectItem(query)
+                this.initBot(
+                    this.args[username].username,
+                    this.args[username].password,
+                )
+                return this.inspectItem(query) // try again with another bot
             }
 
             this.ttls[username] = setTimeout(() => {
@@ -159,13 +194,14 @@ export class InspectService implements OnModuleInit {
         if (process.env.GC_DEBUG === 'true') {
             this.steamUsers[username].on('disconnected', (eresult, msg) => {
                 this.logger.debug(
-                    `${username} Logged off, reconnecting! (${eresult}, ${msg})`,
+                    `${username}: Logged off, reconnecting! (${eresult}, ${msg})`,
                 )
+                this.initBot(username, this.args[username].password)
             })
         }
 
         this.steamUsers[username].on('loggedOn', () => {
-            this.logger.debug(`${username} Log on OK`)
+            this.logger.debug(`${username}: Log on OK`)
 
             this.steamUsers[username].gamesPlayed([], true)
 
@@ -195,7 +231,7 @@ export class InspectService implements OnModuleInit {
                             } else {
                                 if (process.env.GC_DEBUG === 'true') {
                                     this.logger.debug(
-                                        `${username} Initiating GC Connection`,
+                                        `${username}: Initiating GC Connection`,
                                     )
                                 }
                                 this.steamUsers[username].gamesPlayed(
@@ -219,7 +255,7 @@ export class InspectService implements OnModuleInit {
             this.steamUsers[username],
         )
 
-        this.cs2Instances[username].on('inspectItemInfo', (response) => {
+        this.cs2Instances[username].on('inspectItemInfo', async (response) => {
             this.busy.splice(this.busy.indexOf(username), 1)
 
             clearTimeout(this.ttls[username])
@@ -227,12 +263,73 @@ export class InspectService implements OnModuleInit {
             if (!this.promises[username]) {
                 if (process.env.GC_DEBUG === 'true') {
                     this.logger.error(
-                        `${username} Received inspectItemInfo event without a promise`,
+                        `${username}: Received inspectItemInfo event without a promise`,
                     )
                 }
             }
 
-            return this.promises[username](response)
+            try {
+                const history = await this.assetRepository.findOne({
+                    where: {
+                        paintWear: response.paintwear,
+                        paintIndex: response.paintindex,
+                        defIndex: response.defindex,
+                        paintSeed: response.paintseed,
+                        origin: response.origin,
+                        questId: response.questid,
+                        rarity: response.rarity,
+                    },
+                    order: {
+                        createdAt: 'DESC',
+                    },
+                })
+
+                const already = await this.historyRepository.findOne({
+                    where: {
+                        assetId: parseInt(response.itemid),
+                    },
+                })
+
+                if (!already) {
+                    await this.historyRepository.save({
+                        assetId: parseInt(response.itemid),
+                        prevAssetId: history?.assetId,
+                        owner: this.inspects[response.itemid].ms,
+                        prevOwner: history?.ms,
+                        d: this.inspects[response.itemid].d,
+                        stickers: response.stickers,
+                        prevStickers: history?.stickers,
+                        type: this.getHistoryType(response, history),
+                    })
+                }
+
+                const asset = await this.assetRepository.save({
+                    ms: this.inspects[response.itemid].ms,
+                    d: this.inspects[response.itemid].d,
+                    assetId: response.itemid,
+                    paintSeed: response.paintseed,
+                    paintIndex: response.paintindex,
+                    paintWear: response.paintwear,
+                    customName: response.customname,
+                    defIndex: response.defindex,
+                    origin: response.origin,
+                    rarity: response.rarity,
+                    questId: response.questid,
+                    stickers: response.stickers,
+                })
+
+                delete this.inspects[response.itemid]
+
+                return this.promises[username](
+                    this.formatService.formatResponse(asset),
+                )
+            } catch (e) {
+                console.log(e)
+                this.logger.error('Failed to save asset')
+            } finally {
+                delete this.inspects[response.itemid]
+                delete this.promises[username]
+            }
         })
 
         this.cs2Instances[username].on('connectedToGC', () => {
@@ -240,7 +337,7 @@ export class InspectService implements OnModuleInit {
             if (process.env.GC_DEBUG === 'false') {
                 return
             }
-            this.logger.debug(`${username} CS2 Client Ready!`)
+            this.logger.debug(`${username}: CS2 Client Ready!`)
         })
 
         this.cs2Instances[username].on('disconnectedFromGC', (reason) => {
@@ -254,7 +351,7 @@ export class InspectService implements OnModuleInit {
             }
 
             this.logger.debug(
-                `${username} CS2 unready (${reason}), trying to reconnect!`,
+                `${username}: CS2 unready (${reason}), trying to reconnect!`,
             )
         })
 
@@ -263,7 +360,7 @@ export class InspectService implements OnModuleInit {
                 return
             }
             this.logger.debug(
-                `${username} GC Connection Status Update ${status}`,
+                `${username}: GC Connection Status Update ${status}`,
             )
         })
 
@@ -273,6 +370,55 @@ export class InspectService implements OnModuleInit {
             }
             this.logger.debug(`${username}: ${msg}`)
         })
+    }
+
+    private getHistoryType(response, history) {
+        if (!history) {
+            return HistoryType.UNKNOWN
+        }
+
+        if (history.owner === this.inspects[response.itemid].ms) {
+            for (const slot in [0, 1, 2, 3, 4]) {
+                const sticker = response.stickers.find(
+                    (sticker) => sticker.slot === slot,
+                )
+                const stickerOld = history.stickers.find(
+                    (sticker) => sticker.slot === slot,
+                )
+
+                if (!sticker && stickerOld) {
+                    return HistoryType.STICKER_REMOVE
+                } else if (sticker && !stickerOld) {
+                    return HistoryType.STICKER_APPLY
+                } else if (sticker.stickerId !== stickerOld.stickerId) {
+                    return HistoryType.STICKER_CHANGE
+                }
+            }
+        }
+
+        if (
+            history &&
+            history.owner !== this.inspects[response.itemid].ms &&
+            history.owner.startsWith('7656')
+        ) {
+            return HistoryType.TRADE
+        }
+
+        if (
+            history &&
+            history.owner !== this.inspects[response.itemid].ms &&
+            !history.owner.startsWith('7656')
+        ) {
+            return HistoryType.MARKET_BUY
+        }
+
+        if (
+            history &&
+            !history.owner.startsWith('7656') &&
+            this.inspects[response.itemid].ms.startsWith('7656')
+        ) {
+            return HistoryType.MARKET_LISTING
+        }
     }
 
     private logIn(username, password) {
@@ -289,5 +435,9 @@ export class InspectService implements OnModuleInit {
             password: password,
             rememberPassword: true,
         })
+    }
+
+    private formatItem(asset: Asset) {
+        return asset
     }
 }

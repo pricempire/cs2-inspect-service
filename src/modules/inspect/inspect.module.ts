@@ -2,9 +2,14 @@ import { Module } from '@nestjs/common'
 import { InspectService } from './inspect.service'
 import { InspectController } from './inspect.controller'
 import { ParseService } from './parse.service'
+import { TypeOrmModule } from '@nestjs/typeorm'
+import { Asset } from 'src/entities/asset.entity'
+import { History } from 'src/entities/history.entity'
+import { FormatService } from './format.service'
 
 @Module({
-    providers: [InspectService, ParseService],
+    imports: [TypeOrmModule.forFeature([Asset, History])],
+    providers: [InspectService, ParseService, FormatService],
     controllers: [InspectController],
 })
 export class InspectModule {}
