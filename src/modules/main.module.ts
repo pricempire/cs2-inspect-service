@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm'
 import { InspectModule } from './inspect/inspect.module'
 import 'dotenv/config'
 import { ScheduleModule } from '@nestjs/schedule'
+import { Rankings } from 'src/views/rankings.view'
 
 @Module({
     imports: [
@@ -22,7 +23,7 @@ import { ScheduleModule } from '@nestjs/schedule'
             //     },
             //     duration: 5 * 60 * 1000,
             // },
-            entities: [__dirname + '/../**/*.{entity}.{js,ts}'],
+            entities: [__dirname + '/../**/*.{entity,view}.{js,ts}'],
             logging: process.env.POSTGRESQL_LOGGING === 'true',
             autoLoadEntities: true,
             synchronize: true,
