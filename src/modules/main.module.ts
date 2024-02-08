@@ -1,8 +1,9 @@
-import { Module } from '@nestjs/common'
-import { TypeOrmModule } from '@nestjs/typeorm'
+import { Logger, Module } from '@nestjs/common'
+import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm'
 import { InspectModule } from './inspect/inspect.module'
-import { ScheduleModule } from '@nestjs/schedule'
+import { Cron, ScheduleModule } from '@nestjs/schedule'
 import 'dotenv/config'
+import { DataSource } from 'typeorm'
 
 @Module({
     imports: [
@@ -31,4 +32,21 @@ import 'dotenv/config'
         ScheduleModule.forRoot(),
     ],
 })
-export class MainModule {}
+export class MainModule {
+    private readonly logger = new Logger(MainModule.name)
+    constructor(@InjectDataSource() private dataSource: DataSource) {}
+
+    // This method is called every hour to refresh the materialized view
+    @Cron('0 0 * * * *')
+    async handleCron() {
+        this.logger.debug('Refreshing materialized view "rankings"')
+
+        const date = new Date()
+        await this.dataSource.query('REFRESH MATERIALIZED VIEW "rankings"')
+        const diff = new Date().getTime() - date.getTime()
+
+        this.logger.debug(
+            'Materialized view "rankings" refreshed in ' + diff / 1000 + 's',
+        )
+    }
+}
