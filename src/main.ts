@@ -4,7 +4,7 @@ import { ImportModule } from './modules/import.module'
 import 'dotenv/config'
 
 async function bootstrap() {
-    if (process.env.IMPORT_DB === 'true') {
+    if (process.env.npm_lifecycle_event === 'import') {
         // check if source database env variables are set
 
         if (
