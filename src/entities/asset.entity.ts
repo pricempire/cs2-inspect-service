@@ -9,7 +9,7 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm'
     'paintWear',
 ])
 @Index('asset_ms', ['ms'])
-@Index('asset_assetId', ['assetId'])
+@Index('asset_assetId', ['assetId'], { unique: true })
 @Index('asset_d', ['d'])
 @Index('asset_paintSeed', ['paintSeed'])
 @Index('asset_paintIndex', ['paintIndex'])
