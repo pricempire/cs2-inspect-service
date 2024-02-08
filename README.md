@@ -1,4 +1,4 @@
-# CS2 Nest.js Inspect server
+# CS2 Nest.js Inspect server
 
 This is a simple inspect server for the CS2 Nestjs application. It is used to inspect the data that is being sent to the server. 
 
@@ -63,9 +63,9 @@ You can enable logging for the PostgreSQL database by setting the `POSTGRESQL_LO
 POSTGRESQL_LOGGING=true
 ```
 
-### GameCooridantor Logging
+### GameCoordiantor Logging
 
-You can enable logging for the GameCoordinator by setting the `GC_DEBUG` environment variable to `true`.
+You can enable logging for the GameCoordiantor by setting the `GC_DEBUG` environment variable to `true`.
 
 ```bash
 GC_DEBUG=true
@@ -112,11 +112,21 @@ $ pnpm start
 
 The server will start on the port that is specified in the `.env` file.
 
+## Development
+
+You can run the server in development mode using the following command:
+
+```bash
+$ pnpm run start:dev
+```
+
+The server will start on the port that is specified in the `.env` file.
+
 ### API
 
 The server has the following API endpoints:
 
-#### GET /inspect
+#### GET /
 
 This endpoint is used to inspect the data that is being sent to the server.
 
@@ -162,3 +172,4 @@ $ curl -X GET -H "Content-Type: application/json" http://localhost:3000/?url=ste
     }
 }
 ```
+
