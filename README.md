@@ -173,3 +173,31 @@ $ curl -X GET -H "Content-Type: application/json" http://localhost:3000/?url=ste
 }
 ```
 
+# Contributing
+
+If you want to contribute to the project, you can do so by creating a pull request.
+
+# License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+# Acknowledgements
+
+- [Nest.js](https://nestjs.com/)
+- [TypeORM](https://typeorm.io/)
+- [Redis](https://redis.io/)
+- [PostgreSQL](https://www.postgresql.org/)
+- [Axios](https://axios-http.com/)
+- [CS2](https://blog.counter-strike.net/)
+- [node-globaloffensive](https://github.com/DoctorMcKay/node-globaloffensive)
+- [node-steam-user](https://github.com/DoctorMcKay/node-steam-user) 
+
+# Thanks To 
+
+- [DoctorMcKay](https://github.com/DoctorMcKay)
+- [CSFloat.com](https://csfloat.com/)
+
+# Contact
+
+If you have any questions, you can contact me at [Discord](https://discord.gg/pricempire).
+
