@@ -60,6 +60,7 @@ export class Asset {
 
     @Column({
         type: 'smallint',
+        nullable: true,
     })
     quality: number
 
