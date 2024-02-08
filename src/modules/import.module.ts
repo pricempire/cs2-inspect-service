@@ -54,19 +54,21 @@ export class ImportModule implements OnModuleInit {
             )
 
             for await (const item of items) {
+                const buf = Buffer.alloc(4)
+                buf.writeInt32BE(item.paintwear, 0)
+                const float = buf.readFloatBE(0)
                 await this.toDataSource.query(
-                    `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+                    `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
                     [
                         item.ms,
                         item.a,
                         item.d,
                         item.paintseed,
-                        item.paintwear,
+                        float,
                         item.defindex,
                         item.paintindex,
-                        item.stattrak,
-                        item.souvenir,
-                        item.props,
+                        item.stattrak === '1' ? true : false,
+                        item.souvenir === '1' ? true : false,
                         item.stickers,
                         item.updated,
                         item.rarity,
