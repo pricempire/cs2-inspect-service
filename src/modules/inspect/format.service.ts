@@ -1,5 +1,11 @@
 import { HttpService } from '@nestjs/axios'
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
+import {
+    HttpException,
+    HttpStatus,
+    Injectable,
+    Logger,
+    OnModuleInit,
+} from '@nestjs/common'
 import { firstValueFrom } from 'rxjs'
 import { Asset } from 'src/entities/asset.entity'
 
@@ -200,6 +206,8 @@ export class FormatService implements OnModuleInit {
                         full_item_name: 'Graffiti',
                     },
                 }
+            } else {
+                throw new HttpException('Item not found', HttpStatus.NOT_FOUND)
             }
         }
         const paint = weapon.paints[asset.paintIndex]
