@@ -97,21 +97,17 @@ export class ImportModule implements OnModuleInit {
                 `SELECT * FROM "history" ORDER BY id LIMIT ${this.limit} OFFSET ${offset}`,
             )
 
+            const values = []
             for await (const item of items) {
-                await this.toDataSource.query(
-                    `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                    [
-                        item.a,
-                        item.steamid,
-                        item.created_at,
-                        item.current_steamid,
-                        item.stickers,
-                        item.type,
-                        item.d,
-                        item.stickers_new,
-                    ],
+                values.push(
+                    `(${item.a}, '${item.steamid}', '${item.created_at}', '${item.current_steamid}', '${item.stickers}', '${item.type}', '${item.d}', '${item.stickers_new}')`,
                 )
             }
+
+            await this.toDataSource.query(
+                `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${values.join(',')}`,
+            )
+
             offset += this.limit
 
             this.logger.debug('Imported History ' + offset + ' items')
