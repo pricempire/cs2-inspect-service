@@ -33,7 +33,9 @@ import {
 @Index('asset_stickers', ['stickers'])
 @Entity()
 export class Asset {
-    @PrimaryGeneratedColumn()
+    @PrimaryGeneratedColumn({
+        type: 'bigint',
+    })
     id: number
 
     @Column({
