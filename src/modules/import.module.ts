@@ -27,7 +27,7 @@ import 'dotenv/config'
 })
 export class ImportModule implements OnModuleInit {
     private readonly logger = new Logger(ImportModule.name)
-    private limit = 50000
+    private limit = 10000
 
     constructor(
         @InjectDataSource('source') private fromDataSource: DataSource,
@@ -67,7 +67,7 @@ export class ImportModule implements OnModuleInit {
                 values.push(
                     `(${this.signedToUn(item.ms)}, ${this.signedToUn(
                         item.a,
-                    )}, '${item.d}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
+                    )}, '${this.signedToUn(item.d)}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
                         item.stattrak === '1' ? true : false
                     }, ${item.souvenir === '1' ? true : false}, ${
                         item.stickers ? JSON.stringify(item.stickers) : null
