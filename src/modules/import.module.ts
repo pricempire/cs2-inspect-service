@@ -105,7 +105,7 @@ export class ImportModule implements OnModuleInit {
             const values = []
             for (const item of items) {
                 values.push(
-                    `(${item.a}, '${item.steamid}', '${item.created_at}', '${item.current_steamid}', '${item.stickers}', '${item.type}', '${item.d}', '${item.stickers_new}')`,
+                    `(${this.signedToUn(item.a)}, '${this.signedToUn(item.steamid)}', '${item.created_at}', '${this.signedToUn(item.current_steamid)}', '${item.stickers ? JSON.stringify(item.stickers) : null}', '${item.type}', '${this.signedToUn(item.d)}', '${item.stickers_new ? JSON.stringify(item.stickers_new) : null}')`,
                 )
             }
 
