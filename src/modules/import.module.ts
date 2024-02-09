@@ -27,7 +27,7 @@ import 'dotenv/config'
 })
 export class ImportModule implements OnModuleInit {
     private readonly logger = new Logger(ImportModule.name)
-    private limit = 200000
+    private limit = 10000
 
     constructor(
         @InjectDataSource('source') private fromDataSource: DataSource,
@@ -96,7 +96,7 @@ export class ImportModule implements OnModuleInit {
 
             offset += this.limit
 
-            if (bulks.length === 10) {
+            if (bulks.length === 50) {
                 await Promise.all(
                     bulks.map((bulk) => {
                         this.toDataSource.query(
