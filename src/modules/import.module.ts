@@ -71,7 +71,7 @@ export class ImportModule implements OnModuleInit {
                         item.stattrak === '1' ? true : false
                     }, ${item.souvenir === '1' ? true : false}, '${
                         item.stickers ? JSON.stringify(item.stickers) : null
-                    }', '${item.updated}', '${item.rarity}')`,
+                    }', '${new Date(item.updated)}', '${item.rarity}')`,
                 )
             }
 
