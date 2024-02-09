@@ -114,11 +114,11 @@ export class ImportModule implements OnModuleInit {
 
             if (bulks.length === 10) {
                 await Promise.all(
-                    bulks.map((bulk) => {
+                    bulks.map((bulk) =>
                         this.toDataSource.query(
                             `INSERT INTO "asset" (id, ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity, quality, origin) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
-                        )
-                    }),
+                        ),
+                    ),
                 )
 
                 bulks.length = 0
@@ -130,7 +130,7 @@ export class ImportModule implements OnModuleInit {
         await Promise.all(
             bulks.map(async (bulk) => {
                 this.toDataSource.query(
-                    `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                    `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity, quality, origin) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
                 )
             }),
         )
@@ -141,11 +141,23 @@ export class ImportModule implements OnModuleInit {
 
         this.logger.debug('Count of items in history: ' + countHistory[0].count)
 
+        const lastHistoryId = await this.toDataSource.query(
+            'SELECT id FROM "history" ORDER BY id DESC LIMIT 1',
+        )
+
+        lastid = 0
+
+        if (lastHistoryId.length > 0) {
+            lastid = lastHistoryId[0].id
+        }
+
         offset = 0
+
+        bulks.length = 0
 
         while (offset < countHistory[0].count) {
             const items = await this.fromDataSource.query(
-                `SELECT * FROM "history" ORDER BY id LIMIT ${this.limit} OFFSET ${offset}`,
+                `SELECT * FROM "history" WHERE id > ${lastid} ORDER BY id LIMIT ${this.limit}`,
             )
 
             const values = []
@@ -155,9 +167,19 @@ export class ImportModule implements OnModuleInit {
                 )
             }
 
-            await this.toDataSource.query(
-                `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${values.join(',')} ON CONFLICT DO NOTHING`,
-            )
+            bulks.push(values)
+
+            if (bulks.length === 10) {
+                await Promise.all(
+                    bulks.map((bulk) =>
+                        this.toDataSource.query(
+                            `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                        ),
+                    ),
+                )
+
+                bulks.length = 0
+            }
 
             offset += this.limit
 

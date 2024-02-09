@@ -1,4 +1,11 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm'
+import {
+    Column,
+    CreateDateColumn,
+    Entity,
+    Index,
+    PrimaryColumn,
+    PrimaryGeneratedColumn,
+} from 'typeorm'
 
 export enum HistoryType {
     TRADE = 1,
@@ -23,6 +30,11 @@ export enum HistoryType {
 @Index('history_type', ['type'])
 @Index('history_createdAt', ['createdAt'])
 export class History {
+    @PrimaryGeneratedColumn({
+        type: 'bigint',
+    })
+    id: number
+
     @PrimaryColumn({
         type: 'bigint',
     })
