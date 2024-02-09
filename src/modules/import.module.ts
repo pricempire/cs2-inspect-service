@@ -64,6 +64,12 @@ export class ImportModule implements OnModuleInit {
                 buf.writeInt32BE(item.paintwear, 0)
                 const float = buf.readFloatBE(0)
 
+                // convert to YYYY-MM-DD HH:MM:SS
+                const date = new Date(item.updated)
+                    .toISOString()
+                    .replace('T', ' ')
+                    .replace('Z', '')
+
                 values.push(
                     `(${this.signedToUn(item.ms)}, ${this.signedToUn(
                         item.a,
@@ -71,7 +77,7 @@ export class ImportModule implements OnModuleInit {
                         item.stattrak === '1' ? true : false
                     }, ${item.souvenir === '1' ? true : false}, '${
                         item.stickers ? JSON.stringify(item.stickers) : null
-                    }', '${new Date(item.updated)}', '${item.rarity}')`,
+                    }', '${date}', '${item.rarity}')`,
                 )
             }
 
