@@ -27,7 +27,7 @@ import 'dotenv/config'
 })
 export class ImportModule implements OnModuleInit {
     private readonly logger = new Logger(ImportModule.name)
-    private limit = 500000
+    private limit = 100000
 
     constructor(
         @InjectDataSource('source') private fromDataSource: DataSource,
@@ -50,6 +50,9 @@ export class ImportModule implements OnModuleInit {
         this.logger.debug('Count of items in items: ' + count[0].count)
 
         let offset = 0
+
+        const bulks = []
+
         while (offset < count[0].count) {
             const items = await this.fromDataSource.query(
                 `SELECT * FROM "items" ORDER BY floatid LIMIT ${this.limit} OFFSET ${offset}`,
@@ -82,14 +85,32 @@ export class ImportModule implements OnModuleInit {
                 )
             }
 
-            await this.toDataSource.query(
-                `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${values.join(',')} ON CONFLICT DO NOTHING`,
-            )
+            bulks.push(values)
+
+            if (bulks.length === 10) {
+                await Promise.all(
+                    bulks.map(async (bulk) => {
+                        this.toDataSource.query(
+                            `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                        )
+                    }),
+                )
+
+                bulks.length = 0
+            }
 
             offset += this.limit
 
             this.logger.debug('Imported ' + offset + ' items')
         }
+
+        await Promise.all(
+            bulks.map(async (bulk) => {
+                this.toDataSource.query(
+                    `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                )
+            }),
+        )
 
         const countHistory = await this.fromDataSource.query(
             'SELECT COUNT(id) FROM "history"',
