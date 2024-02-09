@@ -49,7 +49,7 @@ export class ImportModule implements OnModuleInit {
 
         this.logger.debug('Count of items in items: ' + count[0].count)
 
-        let offset = 0
+        let offset = 46200000
 
         const bulks = []
 
