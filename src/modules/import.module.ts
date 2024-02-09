@@ -76,7 +76,7 @@ export class ImportModule implements OnModuleInit {
                 `Loaded ${items.length} items in ${new Date().getTime() - date.getTime()}ms`,
             )
 
-            this.logger.debug('Importing ' + offset + ' items')
+            this.logger.debug('Importing offset:' + offset)
 
             if (items.length === 0) {
                 break
@@ -125,7 +125,7 @@ export class ImportModule implements OnModuleInit {
 
                 bulks.length = 0
 
-                this.logger.debug('Imported ' + offset + ' items')
+                this.logger.debug('Imported offset:' + offset)
             }
         }
 
@@ -171,7 +171,7 @@ export class ImportModule implements OnModuleInit {
                     .replace('Z', '')
 
                 values.push(
-                    `(${this.signedToUn(item.a)}, '${this.signedToUn(item.steamid)}', '${date}', '${this.signedToUn(item.current_steamid)}', ${item.stickers ? "'" + JSON.stringify(item.stickers) + "'" : null}, '${item.type}', '${this.signedToUn(item.d)}', ${item.stickers_new ? "'" + JSON.stringify(item.stickers_new) + "'" : null})`,
+                    `(${this.signedToUn(item.a)}, ${item.steamid ? "'" + this.signedToUn(item.steamid) + "'" : null}, '${date}', '${this.signedToUn(item.current_steamid)}', ${item.stickers ? "'" + JSON.stringify(item.stickers) + "'" : null}, '${item.type}', '${this.signedToUn(item.d)}', ${item.stickers_new ? "'" + JSON.stringify(item.stickers_new) + "'" : null})`,
                 )
             }
 
