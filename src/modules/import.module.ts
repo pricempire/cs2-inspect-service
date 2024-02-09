@@ -27,7 +27,7 @@ import 'dotenv/config'
 })
 export class ImportModule implements OnModuleInit {
     private readonly logger = new Logger(ImportModule.name)
-    private limit = 50000
+    private limit = 100000
 
     constructor(
         @InjectDataSource('source') private fromDataSource: DataSource,
