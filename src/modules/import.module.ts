@@ -43,8 +43,6 @@ export class ImportModule implements OnModuleInit {
     }
 
     private async import() {
-        // Import data from source to target
-
         const count = await this.fromDataSource.query(
             'SELECT COUNT(floatid) FROM "items"',
         )
@@ -87,6 +85,7 @@ export class ImportModule implements OnModuleInit {
             await this.toDataSource.query(
                 `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${values.join(',')}`,
             )
+
             offset += this.limit
 
             this.logger.debug('Imported ' + offset + ' items')
