@@ -87,6 +87,8 @@ export class ImportModule implements OnModuleInit {
 
             bulks.push(values)
 
+            offset += this.limit
+
             if (bulks.length === 10) {
                 await Promise.all(
                     bulks.map(async (bulk) => {
@@ -97,11 +99,9 @@ export class ImportModule implements OnModuleInit {
                 )
 
                 bulks.length = 0
+
+                this.logger.debug('Imported ' + offset + ' items')
             }
-
-            offset += this.limit
-
-            this.logger.debug('Imported ' + offset + ' items')
         }
 
         await Promise.all(
