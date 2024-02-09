@@ -101,9 +101,11 @@ export class ImportModule implements OnModuleInit {
                 values.push(
                     `(${item.floatid}, ${this.signedToUn(item.ms)}, ${a}, '${this.signedToUn(item.d)}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
                         item.stattrak === '1' ? true : false
-                    }, ${item.souvenir === '1' ? true : false}, '${
-                        item.stickers ? JSON.stringify(item.stickers) : null
-                    }', '${date}', '${props.rarity}', '${props.quality}', '${props.origin}')`,
+                    }, ${item.souvenir === '1' ? true : false}, ${
+                        item.stickers
+                            ? "'" + JSON.stringify(item.stickers) + "'"
+                            : null
+                    }, '${date}', '${props.rarity}', '${props.quality}', '${props.origin}')`,
                 )
                 lastid = item.floatid
             }
@@ -169,7 +171,7 @@ export class ImportModule implements OnModuleInit {
                     .replace('Z', '')
 
                 values.push(
-                    `(${this.signedToUn(item.a)}, '${this.signedToUn(item.steamid)}', '${date}', '${this.signedToUn(item.current_steamid)}', '${item.stickers ? JSON.stringify(item.stickers) : null}', '${item.type}', '${this.signedToUn(item.d)}', '${item.stickers_new ? JSON.stringify(item.stickers_new) : null}')`,
+                    `(${this.signedToUn(item.a)}, '${this.signedToUn(item.steamid)}', '${date}', '${this.signedToUn(item.current_steamid)}', ${item.stickers ? "'" + JSON.stringify(item.stickers) + "'" : null}, '${item.type}', '${this.signedToUn(item.d)}', ${item.stickers_new ? "'" + JSON.stringify(item.stickers_new) + "'" : null})`,
                 )
             }
 
