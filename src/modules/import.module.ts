@@ -32,7 +32,7 @@ export class ImportModule implements OnModuleInit {
     constructor(
         @InjectDataSource('source') private fromDataSource: DataSource,
         @InjectDataSource('to') private toDataSource: DataSource,
-    ) {}
+    ) { }
 
     async onModuleInit() {
         this.logger.debug('Importing data from source to target')
@@ -99,12 +99,10 @@ export class ImportModule implements OnModuleInit {
                 const props = this.extractProperties(item.props)
 
                 values.push(
-                    `(${item.floatid}, ${this.signedToUn(item.ms)}, ${a}, '${this.signedToUn(item.d)}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
-                        item.stattrak === '1' ? true : false
-                    }, ${item.souvenir === '1' ? true : false}, ${
-                        item.stickers
-                            ? "'" + JSON.stringify(item.stickers) + "'"
-                            : 'NULL'
+                    `(${item.floatid}, ${this.signedToUn(item.ms)}, ${a}, '${this.signedToUn(item.d)}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${item.stattrak === '1' ? true : false
+                    }, ${item.souvenir === '1' ? true : false}, ${item.stickers
+                        ? "'" + JSON.stringify(item.stickers) + "'"
+                        : 'NULL'
                     }, '${date}', '${props.rarity}', '${props.quality}', '${props.origin}')`,
                 )
                 lastid = item.floatid
@@ -196,13 +194,15 @@ export class ImportModule implements OnModuleInit {
 
         // Insert remaining history
 
-        await Promise.all(
-            bulks.map(async (bulk) => {
-                this.toDataSource.query(
-                    `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
-                )
-            }),
-        )
+        if (bulks.length > 0) {
+            await Promise.all(
+                bulks.map(async (bulk) => {
+                    this.toDataSource.query(
+                        `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                    )
+                }),
+            )
+        }
 
         this.logger.debug('Imported all items & history, enjoy your data')
     }
