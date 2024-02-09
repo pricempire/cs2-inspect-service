@@ -1,6 +1,6 @@
-# CS2 Nest.js Inspect server
+# CS2 Inspect service
 
-This is a simple inspect server for the CS2 Nestjs application. It is used to inspect the data that is being sent to the server. 
+This is a simple inspect service for the CS2. The service is built using [Nest.js](https://nestjs.com/), [TypeORM](https://typeorm.io/), [Redis](https://redis.io/), and [PostgreSQL](https://www.postgresql.org/).
 
 ## Installation
 
