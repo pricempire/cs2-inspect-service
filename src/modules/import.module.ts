@@ -28,6 +28,7 @@ import 'dotenv/config'
 export class ImportModule implements OnModuleInit {
     private readonly logger = new Logger(ImportModule.name)
     private limit = 100000
+    private already = []
 
     constructor(
         @InjectDataSource('source') private fromDataSource: DataSource,
@@ -54,7 +55,7 @@ export class ImportModule implements OnModuleInit {
         let offset = 0
         while (offset < count[0].count) {
             const items = await this.fromDataSource.query(
-                `SELECT * FROM "items" ORDER BY floatid LIMIT ${this.limit} OFFSET ${offset} GROUP BY a`,
+                `SELECT * FROM "items" ORDER BY floatid LIMIT ${this.limit} OFFSET ${offset}`,
             )
 
             if (items.length === 0) {
@@ -68,6 +69,14 @@ export class ImportModule implements OnModuleInit {
                 buf.writeInt32BE(item.paintwear, 0)
                 const float = buf.readFloatBE(0)
 
+                const a = this.signedToUn(item.a)
+
+                if (this.already.includes(a)) {
+                    continue
+                }
+
+                this.already.push(a)
+
                 // convert to YYYY-MM-DD HH:MM:SS
                 const date = new Date(item.updated)
                     .toISOString()
@@ -75,9 +84,7 @@ export class ImportModule implements OnModuleInit {
                     .replace('Z', '')
 
                 values.push(
-                    `(${this.signedToUn(item.ms)}, ${this.signedToUn(
-                        item.a,
-                    )}, '${this.signedToUn(item.d)}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
+                    `(${this.signedToUn(item.ms)}, ${a}, '${this.signedToUn(item.d)}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
                         item.stattrak === '1' ? true : false
                     }, ${item.souvenir === '1' ? true : false}, '${
                         item.stickers ? JSON.stringify(item.stickers) : null
