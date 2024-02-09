@@ -27,7 +27,7 @@ import 'dotenv/config'
 })
 export class ImportModule implements OnModuleInit {
     private readonly logger = new Logger(ImportModule.name)
-    private limit = 10000
+    private limit = 200000
 
     constructor(
         @InjectDataSource('source') private fromDataSource: DataSource,
@@ -68,9 +68,6 @@ export class ImportModule implements OnModuleInit {
             const date = new Date()
 
             this.logger.debug('Loading ' + offset + ' items')
-            this.logger.debug(
-                `SELECT * FROM "items" WHERE floatid > ${lastid} ORDER BY floatid LIMIT ${this.limit}`,
-            )
 
             const items = await this.fromDataSource.query(
                 `SELECT * FROM "items" WHERE floatid > ${lastid} ORDER BY floatid LIMIT ${this.limit}`, // LIMIT ${this.limit} OFFSET ${offset}`,
