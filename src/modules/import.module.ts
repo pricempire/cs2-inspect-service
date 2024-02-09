@@ -93,7 +93,7 @@ export class ImportModule implements OnModuleInit {
 
             if (bulks.length === 10) {
                 await Promise.all(
-                    bulks.map(async (bulk) => {
+                    bulks.map((bulk) => {
                         this.toDataSource.query(
                             `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
                         )
