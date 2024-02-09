@@ -66,6 +66,12 @@ export class ImportModule implements OnModuleInit {
 
         while (offset < count[0].count) {
             const date = new Date()
+
+            this.logger.debug('Loading ' + offset + ' items')
+            this.logger.debug(
+                `SELECT * FROM "items" WHERE floatid > ${lastid} ORDER BY floatid LIMIT ${this.limit}`,
+            )
+
             const items = await this.fromDataSource.query(
                 `SELECT * FROM "items" WHERE floatid > ${lastid} ORDER BY floatid LIMIT ${this.limit}`, // LIMIT ${this.limit} OFFSET ${offset}`,
             )
