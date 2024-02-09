@@ -53,10 +53,11 @@ export class ImportModule implements OnModuleInit {
 
         const bulks = []
 
+        let lastid = 0
         while (offset < count[0].count) {
             const date = new Date()
             const items = await this.fromDataSource.query(
-                `SELECT * FROM "items" ORDER BY floatid LIMIT ${this.limit} OFFSET ${offset}`,
+                `SELECT * FROM "items" ORDER BY floatid WHERE floatid > ${lastid} LIMIT ${this.limit} OFFSET ${offset}`,
             )
 
             this.logger.debug(
@@ -90,6 +91,7 @@ export class ImportModule implements OnModuleInit {
                         item.stickers ? JSON.stringify(item.stickers) : null
                     }', '${date}', '${item.rarity}')`,
                 )
+                lastid = item.floatid
             }
 
             bulks.push(values)
