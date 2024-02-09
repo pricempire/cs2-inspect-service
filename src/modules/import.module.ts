@@ -47,7 +47,7 @@ export class ImportModule implements OnModuleInit {
         // Import data from source to target
 
         const count = await this.fromDataSource.query(
-            'SELECT COUNT(floatid) FROM "items" GROUP BY a',
+            'SELECT COUNT(floatid) FROM "items"',
         )
 
         this.logger.debug('Count of items in items: ' + count[0].count)
