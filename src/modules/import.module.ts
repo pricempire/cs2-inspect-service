@@ -160,7 +160,7 @@ export class ImportModule implements OnModuleInit {
 
         while (offset < countHistory[0].count) {
             const items = await this.fromDataSource.query(
-                `SELECT * FROM "history" WHERE id > ${lastid} ORDER BY id LIMIT ${this.limit}`,
+                `SELECT * FROM "history" WHERE id > ${lastid} AND current_steamid IS NOT NULL ORDER BY id LIMIT ${this.limit}`,
             )
 
             const values = []
