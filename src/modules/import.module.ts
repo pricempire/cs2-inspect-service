@@ -181,6 +181,7 @@ export class ImportModule implements OnModuleInit {
 
             bulks.push(values)
 
+            console.log(bulks)
             if (bulks.length === 10) {
                 await Promise.all(
                     bulks
