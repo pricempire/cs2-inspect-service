@@ -60,6 +60,9 @@ export class ImportModule implements OnModuleInit {
             const values = []
 
             for await (const item of items) {
+                if (!item.stickers) {
+                    continue
+                }
                 const buf = Buffer.alloc(4)
                 buf.writeInt32BE(item.paintwear, 0)
                 const float = buf.readFloatBE(0)
