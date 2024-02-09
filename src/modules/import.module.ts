@@ -70,12 +70,12 @@ export class ImportModule implements OnModuleInit {
                 const float = buf.readFloatBE(0)
 
                 const a = this.signedToUn(item.a)
+                //
+                // if (this.already.includes(a)) {
+                //     continue
+                // }
 
-                if (this.already.includes(a)) {
-                    continue
-                }
-
-                this.already.push(a)
+                // this.already.push(a)
 
                 // convert to YYYY-MM-DD HH:MM:SS
                 const date = new Date(item.updated)
