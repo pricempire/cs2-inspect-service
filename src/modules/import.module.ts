@@ -154,6 +154,8 @@ export class ImportModule implements OnModuleInit {
             'SELECT id FROM "history" ORDER BY id DESC LIMIT 1',
         )
 
+        console.log(lastHistoryId)
+
         lastid = 0
 
         if (lastHistoryId.length > 0) {
