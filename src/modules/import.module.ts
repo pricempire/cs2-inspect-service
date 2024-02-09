@@ -57,7 +57,7 @@ export class ImportModule implements OnModuleInit {
         while (offset < count[0].count) {
             const date = new Date()
             const items = await this.fromDataSource.query(
-                `SELECT * FROM "items" ORDER BY floatid WHERE floatid > ${lastid} LIMIT ${this.limit} OFFSET ${offset}`,
+                `SELECT * FROM "items" WHERE floatid > ${lastid} ORDER BY floatid  LIMIT ${this.limit} OFFSET ${offset}`,
             )
 
             this.logger.debug(
@@ -84,12 +84,14 @@ export class ImportModule implements OnModuleInit {
                     .replace('T', ' ')
                     .replace('Z', '')
 
+                const props = this.extractProperties(item.props)
+
                 values.push(
                     `(${this.signedToUn(item.ms)}, ${a}, '${this.signedToUn(item.d)}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
                         item.stattrak === '1' ? true : false
                     }, ${item.souvenir === '1' ? true : false}, '${
                         item.stickers ? JSON.stringify(item.stickers) : null
-                    }', '${date}', '${item.rarity}')`,
+                    }', '${date}', '${props.rarity}', '${props.quality}', '${props.origin}')`,
                 )
                 lastid = item.floatid
             }
@@ -102,7 +104,7 @@ export class ImportModule implements OnModuleInit {
                 await Promise.all(
                     bulks.map((bulk) => {
                         this.toDataSource.query(
-                            `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                            `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity, quality, origin) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
                         )
                     }),
                 )
@@ -153,5 +155,13 @@ export class ImportModule implements OnModuleInit {
     private signedToUn(num) {
         const mask = 1n << 63n
         return (BigInt(num) + mask) ^ mask
+    }
+
+    private extractProperties(props: number) {
+        return {
+            origin: props & ((1 << 8) - 1),
+            quality: (props >> 8) & ((1 << 8) - 1),
+            rarity: (props >> 16) & ((1 << 8) - 1),
+        }
     }
 }
