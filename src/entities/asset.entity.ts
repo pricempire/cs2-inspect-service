@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm'
 
-@Index('asset_ms_assetId_d_assetid', ['ms', 'assetId', 'd', 'assetId'], {
+@Index('asset_ms_assetId_d_stickers', ['ms', 'assetId', 'd', 'stickers'], {
     unique: true,
 })
 @Index('paintSeed_paintIndex_paintWear', [
