@@ -127,6 +127,7 @@ export class ImportModule implements OnModuleInit {
             }
         }
 
+        // Insert remaining items
         await Promise.all(
             bulks.map(async (bulk) => {
                 this.toDataSource.query(
@@ -162,8 +163,13 @@ export class ImportModule implements OnModuleInit {
 
             const values = []
             for (const item of items) {
+                const date = new Date(item.created_at)
+                    .toISOString()
+                    .replace('T', ' ')
+                    .replace('Z', '')
+
                 values.push(
-                    `(${this.signedToUn(item.a)}, '${this.signedToUn(item.steamid)}', '${item.created_at}', '${this.signedToUn(item.current_steamid)}', '${item.stickers ? JSON.stringify(item.stickers) : null}', '${item.type}', '${this.signedToUn(item.d)}', '${item.stickers_new ? JSON.stringify(item.stickers_new) : null}')`,
+                    `(${this.signedToUn(item.a)}, '${this.signedToUn(item.steamid)}', '${date}', '${this.signedToUn(item.current_steamid)}', '${item.stickers ? JSON.stringify(item.stickers) : null}', '${item.type}', '${this.signedToUn(item.d)}', '${item.stickers_new ? JSON.stringify(item.stickers_new) : null}')`,
                 )
             }
 
@@ -185,6 +191,18 @@ export class ImportModule implements OnModuleInit {
 
             this.logger.debug('Imported History ' + offset + ' items')
         }
+
+        // Insert remaining history
+
+        await Promise.all(
+            bulks.map(async (bulk) => {
+                this.toDataSource.query(
+                    `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                )
+            }),
+        )
+
+        this.logger.debug('Imported all items & history, enjoy your data')
     }
     private signedToUn(num) {
         const mask = 1n << 63n
