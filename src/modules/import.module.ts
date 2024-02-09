@@ -49,15 +49,25 @@ export class ImportModule implements OnModuleInit {
 
         this.logger.debug('Count of items in items: ' + count[0].count)
 
-        let offset = 46200000
+        let offset = 0
 
         const bulks = []
 
         let lastid = 0
+
+        // Recover last id
+        const lastIdQuery = await this.toDataSource.query(
+            'SELECT id FROM "asset" ORDER BY id DESC LIMIT 1',
+        )
+
+        if (lastIdQuery.length > 0) {
+            lastid = lastIdQuery[0].id
+        }
+
         while (offset < count[0].count) {
             const date = new Date()
             const items = await this.fromDataSource.query(
-                `SELECT * FROM "items" WHERE floatid > ${lastid} ORDER BY floatid  LIMIT ${this.limit} OFFSET ${offset}`,
+                `SELECT * FROM "items" WHERE floatid > ${lastid} ORDER BY floatid LIMIT ${this.limit}`, // LIMIT ${this.limit} OFFSET ${offset}`,
             )
 
             this.logger.debug(
@@ -87,7 +97,7 @@ export class ImportModule implements OnModuleInit {
                 const props = this.extractProperties(item.props)
 
                 values.push(
-                    `(${this.signedToUn(item.ms)}, ${a}, '${this.signedToUn(item.d)}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
+                    `(${item.floatid}, ${this.signedToUn(item.ms)}, ${a}, '${this.signedToUn(item.d)}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
                         item.stattrak === '1' ? true : false
                     }, ${item.souvenir === '1' ? true : false}, '${
                         item.stickers ? JSON.stringify(item.stickers) : null
@@ -104,7 +114,7 @@ export class ImportModule implements OnModuleInit {
                 await Promise.all(
                     bulks.map((bulk) => {
                         this.toDataSource.query(
-                            `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity, quality, origin) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                            `INSERT INTO "asset" (id, ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity, quality, origin) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
                         )
                     }),
                 )

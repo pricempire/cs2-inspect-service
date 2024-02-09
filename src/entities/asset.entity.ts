@@ -1,4 +1,10 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm'
+import {
+    Column,
+    CreateDateColumn,
+    Entity,
+    Index,
+    PrimaryGeneratedColumn,
+} from 'typeorm'
 
 @Index('asset_ms_assetId_d_stickers', ['ms', 'assetId', 'd', 'stickers'], {
     unique: true,
@@ -27,7 +33,10 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm'
 @Index('asset_stickers', ['stickers'])
 @Entity()
 export class Asset {
-    @PrimaryColumn({
+    @PrimaryGeneratedColumn()
+    id: number
+
+    @Column({
         type: 'bigint',
     })
     assetId: number
