@@ -54,8 +54,13 @@ export class ImportModule implements OnModuleInit {
         const bulks = []
 
         while (offset < count[0].count) {
+            const date = new Date()
             const items = await this.fromDataSource.query(
                 `SELECT * FROM "items" ORDER BY floatid LIMIT ${this.limit} OFFSET ${offset}`,
+            )
+
+            this.logger.debug(
+                `Loaded ${items.length} items in ${new Date().getTime() - date.getTime()}ms`,
             )
 
             this.logger.debug('Importing ' + offset + ' items')
