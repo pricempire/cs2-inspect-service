@@ -113,7 +113,7 @@ export class ImportModule implements OnModuleInit {
 
             offset += this.limit
 
-            if (bulks.length === 50) {
+            if (bulks.length === 10) {
                 await Promise.all(
                     bulks.map((bulk) => {
                         this.toDataSource.query(
