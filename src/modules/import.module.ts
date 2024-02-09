@@ -60,9 +60,6 @@ export class ImportModule implements OnModuleInit {
             const values = []
 
             for await (const item of items) {
-                if (!item.stickers) {
-                    continue
-                }
                 const buf = Buffer.alloc(4)
                 buf.writeInt32BE(item.paintwear, 0)
                 const float = buf.readFloatBE(0)
@@ -72,9 +69,9 @@ export class ImportModule implements OnModuleInit {
                         item.a,
                     )}, '${this.signedToUn(item.d)}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
                         item.stattrak === '1' ? true : false
-                    }, ${item.souvenir === '1' ? true : false}, ${
+                    }, ${item.souvenir === '1' ? true : false}, '${
                         item.stickers ? JSON.stringify(item.stickers) : null
-                    }, '${item.updated}', '${item.rarity}')`,
+                    }', '${item.updated}', '${item.rarity}')`,
                 )
             }
 
