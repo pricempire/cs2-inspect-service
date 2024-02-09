@@ -74,6 +74,9 @@ export class ImportModule implements OnModuleInit {
                     }, '${item.updated}', '${item.rarity}')`,
                 )
             }
+
+            console.log(values)
+
             await this.toDataSource.query(
                 `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${values.join(',')}`,
             )
