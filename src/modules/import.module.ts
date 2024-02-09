@@ -83,7 +83,7 @@ export class ImportModule implements OnModuleInit {
             }
 
             await this.toDataSource.query(
-                `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${values.join(',')}`,
+                `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${values.join(',')} ON CONFLICT DO NOTHING`,
             )
 
             offset += this.limit
@@ -112,7 +112,7 @@ export class ImportModule implements OnModuleInit {
             }
 
             await this.toDataSource.query(
-                `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${values.join(',')}`,
+                `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${values.join(',')} ON CONFLICT DO NOTHING`,
             )
 
             offset += this.limit
