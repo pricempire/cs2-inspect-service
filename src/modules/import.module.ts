@@ -73,7 +73,7 @@ export class ImportModule implements OnModuleInit {
                         item.paintindex,
                         item.stattrak === '1' ? true : false,
                         item.souvenir === '1' ? true : false,
-                        item.stickers ? JSON.stringify(item.stickers) : null,
+                        item.stickers ? JSON.stringify(item.stickers) : 'NULL',
                         item.updated,
                         item.rarity,
                     ],
