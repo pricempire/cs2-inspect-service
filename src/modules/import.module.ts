@@ -57,28 +57,26 @@ export class ImportModule implements OnModuleInit {
                 `SELECT * FROM "items" ORDER BY floatid LIMIT ${this.limit} OFFSET ${offset}`,
             )
 
+            const values = []
+
             for await (const item of items) {
                 const buf = Buffer.alloc(4)
                 buf.writeInt32BE(item.paintwear, 0)
                 const float = buf.readFloatBE(0)
-                await this.toDataSource.query(
-                    `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-                    [
-                        this.signedToUn(item.ms),
-                        this.signedToUn(item.a),
-                        this.signedToUn(item.d),
-                        item.paintseed,
-                        float,
-                        item.defindex,
-                        item.paintindex,
-                        item.stattrak === '1' ? true : false,
-                        item.souvenir === '1' ? true : false,
-                        item.stickers ? JSON.stringify(item.stickers) : null,
-                        item.updated,
-                        item.rarity,
-                    ],
+
+                values.push(
+                    `(${this.signedToUn(item.ms)}, ${this.signedToUn(
+                        item.a,
+                    )}, '${item.d}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
+                        item.stattrak === '1' ? true : false
+                    }, ${item.souvenir === '1' ? true : false}, ${
+                        item.stickers ? JSON.stringify(item.stickers) : null
+                    }, '${item.updated}', '${item.rarity}')`,
                 )
             }
+            await this.toDataSource.query(
+                `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${values.join(',')}`,
+            )
             offset += this.limit
 
             this.logger.debug('Imported ' + offset + ' items')
@@ -98,7 +96,7 @@ export class ImportModule implements OnModuleInit {
             )
 
             const values = []
-            for await (const item of items) {
+            for (const item of items) {
                 values.push(
                     `(${item.a}, '${item.steamid}', '${item.created_at}', '${item.current_steamid}', '${item.stickers}', '${item.type}', '${item.d}', '${item.stickers_new}')`,
                 )
