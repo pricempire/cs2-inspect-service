@@ -133,7 +133,7 @@ GC_DEBUG=true
 
 ### accounts.txt
 
-The `accounts.txt` file contains the accounts that are used to authenticate the users. The file is located in the `src` directory. 
+The `accounts.txt` file contains the accounts that are used to authenticate the users. The file is located in the `root` directory. 
 
 ```bash
 # accounts.txt
