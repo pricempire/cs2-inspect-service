@@ -27,7 +27,7 @@ import 'dotenv/config'
 })
 export class ImportModule implements OnModuleInit {
     private readonly logger = new Logger(ImportModule.name)
-    private limit = 10000
+    private limit = 50000
 
     constructor(
         @InjectDataSource('source') private fromDataSource: DataSource,
@@ -80,8 +80,6 @@ export class ImportModule implements OnModuleInit {
                     }', '${date}', '${item.rarity}')`,
                 )
             }
-
-            console.log(values)
 
             await this.toDataSource.query(
                 `INSERT INTO "asset" (ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity) VALUES ${values.join(',')}`,
