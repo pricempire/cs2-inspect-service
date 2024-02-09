@@ -116,11 +116,13 @@ export class ImportModule implements OnModuleInit {
 
             if (bulks.length === 10) {
                 await Promise.all(
-                    bulks.map((bulk) =>
-                        this.toDataSource.query(
-                            `INSERT INTO "asset" (id, ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity, quality, origin) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                    bulks
+                        .filter(Boolean)
+                        .map((bulk) =>
+                            this.toDataSource.query(
+                                `INSERT INTO "asset" (id, ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity, quality, origin) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                            ),
                         ),
-                    ),
                 )
 
                 bulks.length = 0
@@ -132,7 +134,7 @@ export class ImportModule implements OnModuleInit {
         // Insert remaining items
         if (bulks.length > 0) {
             await Promise.all(
-                bulks.map(async (bulk) => {
+                bulks.filter(Boolean).map(async (bulk) => {
                     this.toDataSource.query(
                         `INSERT INTO "asset" (id, ms, "assetId", d, "paintSeed", "paintWear", "defIndex", "paintIndex", "isStattrak", "isSouvenir", stickers, "createdAt", rarity, quality, origin) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
                     )
@@ -181,11 +183,13 @@ export class ImportModule implements OnModuleInit {
 
             if (bulks.length === 10) {
                 await Promise.all(
-                    bulks.map((bulk) =>
-                        this.toDataSource.query(
-                            `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                    bulks
+                        .filter(Boolean)
+                        .map((bulk) =>
+                            this.toDataSource.query(
+                                `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                            ),
                         ),
-                    ),
                 )
 
                 bulks.length = 0
@@ -200,7 +204,7 @@ export class ImportModule implements OnModuleInit {
 
         if (bulks.length > 0) {
             await Promise.all(
-                bulks.map(async (bulk) => {
+                bulks.filter(Boolean).map(async (bulk) => {
                     this.toDataSource.query(
                         `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
                     )
