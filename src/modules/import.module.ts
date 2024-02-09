@@ -110,7 +110,9 @@ export class ImportModule implements OnModuleInit {
                 lastid = item.floatid
             }
 
-            bulks.push(values)
+            if (values.length) {
+                bulks.push(values)
+            }
 
             offset += this.limit
 
@@ -180,9 +182,10 @@ export class ImportModule implements OnModuleInit {
                 )
             }
 
-            bulks.push(values)
+            if (values.length) {
+                bulks.push(values)
+            }
 
-            console.log(bulks)
             if (bulks.length === 10) {
                 await Promise.all(
                     bulks
