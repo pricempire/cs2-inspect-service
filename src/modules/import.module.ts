@@ -58,6 +58,8 @@ export class ImportModule implements OnModuleInit {
                 `SELECT * FROM "items" ORDER BY floatid LIMIT ${this.limit} OFFSET ${offset}`,
             )
 
+            this.logger.debug('Importing ' + offset + ' items')
+
             if (items.length === 0) {
                 break
             }
