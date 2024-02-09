@@ -10,7 +10,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "deploy": "nest build && cp .env dist/.env && pm2 start ecosystem.config.cjs",
-    "import": "nest build && node dist/main.js",
+    "import": "nest build && node dist/main.js --max_old_space_size=10000",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
