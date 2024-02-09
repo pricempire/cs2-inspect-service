@@ -61,6 +61,7 @@ export class ImportModule implements OnModuleInit {
         )
 
         if (lastIdQuery.length > 0) {
+            this.logger.debug('Last id: ' + lastIdQuery[0].id)
             lastid = lastIdQuery[0].id
         }
 
