@@ -141,7 +141,7 @@ username1:password1
 username2:password2
 ```
 
-### .env
+### .env
 
 The `.env` file contains the environment variables that are used to configure the server. 
 
