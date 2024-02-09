@@ -104,7 +104,7 @@ export class ImportModule implements OnModuleInit {
                     }, ${item.souvenir === '1' ? true : false}, ${
                         item.stickers
                             ? "'" + JSON.stringify(item.stickers) + "'"
-                            : null
+                            : 'NULL'
                     }, '${date}', '${props.rarity}', '${props.quality}', '${props.origin}')`,
                 )
                 lastid = item.floatid
@@ -171,7 +171,7 @@ export class ImportModule implements OnModuleInit {
                     .replace('Z', '')
 
                 values.push(
-                    `(${this.signedToUn(item.a)}, ${item.steamid ? "'" + this.signedToUn(item.steamid) + "'" : null}, '${date}', '${this.signedToUn(item.current_steamid)}', ${item.stickers ? "'" + JSON.stringify(item.stickers) + "'" : null}, '${item.type}', '${this.signedToUn(item.d)}', ${item.stickers_new ? "'" + JSON.stringify(item.stickers_new) + "'" : null})`,
+                    `(${this.signedToUn(item.a)}, ${item.steamid ? "'" + this.signedToUn(item.steamid) + "'" : 'NULL'}, '${date}', '${this.signedToUn(item.current_steamid)}', ${item.stickers ? "'" + JSON.stringify(item.stickers) + "'" : 'NULL'}, '${item.type}', '${this.signedToUn(item.d)}', ${item.stickers_new ? "'" + JSON.stringify(item.stickers_new) + "'" : 'NULL'})`,
                 )
             }
 
@@ -208,7 +208,7 @@ export class ImportModule implements OnModuleInit {
     }
     private signedToUn(num) {
         if (num === null) {
-            return null
+            return 'NULL'
         }
         const mask = 1n << 63n
         return (BigInt(num) + mask) ^ mask
