@@ -169,6 +169,7 @@ export class ImportModule implements OnModuleInit {
 
             const values = []
             for (const item of items) {
+                console.log(item)
                 const date = new Date(item.created_at)
                     .toISOString()
                     .replace('T', ' ')
