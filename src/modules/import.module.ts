@@ -207,6 +207,9 @@ export class ImportModule implements OnModuleInit {
         this.logger.debug('Imported all items & history, enjoy your data')
     }
     private signedToUn(num) {
+        if (num === null) {
+            return null
+        }
         const mask = 1n << 63n
         return (BigInt(num) + mask) ^ mask
     }
