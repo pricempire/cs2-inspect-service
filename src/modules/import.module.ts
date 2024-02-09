@@ -46,7 +46,7 @@ export class ImportModule implements OnModuleInit {
         // Import data from source to target
 
         const count = await this.fromDataSource.query(
-            'SELECT COUNT(floatid) FROM "items"',
+            'SELECT COUNT(floatid) FROM "items" GROUP BY a',
         )
 
         this.logger.debug('Count of items in items: ' + count[0].count)
@@ -54,8 +54,12 @@ export class ImportModule implements OnModuleInit {
         let offset = 0
         while (offset < count[0].count) {
             const items = await this.fromDataSource.query(
-                `SELECT * FROM "items" ORDER BY floatid LIMIT ${this.limit} OFFSET ${offset}`,
+                `SELECT * FROM "items" ORDER BY floatid LIMIT ${this.limit} OFFSET ${offset} GROUP BY a`,
             )
+
+            if (items.length === 0) {
+                break
+            }
 
             const values = []
 
