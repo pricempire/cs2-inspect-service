@@ -144,6 +144,10 @@ export class ImportModule implements OnModuleInit {
             )
         }
 
+        await this.toDataSource.query(
+            `select setval('asset_id_seq'::regclass, (SELECT MAX(id) FROM "asset"))`,
+        )
+
         const countHistory = await this.fromDataSource.query(
             'SELECT COUNT(id) FROM "history"',
         )
@@ -215,6 +219,10 @@ export class ImportModule implements OnModuleInit {
                 }),
             )
         }
+
+        await this.toDataSource.query(
+            `select setval('history_id_seq'::regclass, (SELECT MAX(id) FROM "history"))`,
+        )
 
         this.logger.debug('Imported all items & history, enjoy your data')
     }
