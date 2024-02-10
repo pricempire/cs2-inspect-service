@@ -59,7 +59,9 @@ export class History {
     })
     prevOwner: number
 
-    @Column()
+    @Column({
+        nullable: true,
+    })
     d: string
 
     @Column({
