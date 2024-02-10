@@ -99,7 +99,7 @@ export class ImportModule implements OnModuleInit {
                 const props = this.extractProperties(item.props)
 
                 values.push(
-                    `(${item.floatid}, ${this.signedToUn(item.ms)}, ${a}, '${this.signedToUn(item.d)}', ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
+                    `(${item.floatid}, ${this.signedToUn(item.ms)}, ${a}, ${item.d ? "'" + this.signedToUn(item.d) + "'" : 'NULL'}, ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex}, ${
                         item.stattrak === '1' ? true : false
                     }, ${item.souvenir === '1' ? true : false}, ${
                         item.stickers
@@ -181,7 +181,7 @@ export class ImportModule implements OnModuleInit {
                     .replace('Z', '')
 
                 values.push(
-                    `(${item.id},${this.signedToUn(item.a)}, ${item.steamid ? "'" + this.signedToUn(item.steamid) + "'" : 'NULL'}, '${date}', '${this.signedToUn(item.current_steamid)}', ${item.stickers ? "'" + JSON.stringify(item.stickers) + "'" : 'NULL'}, '${item.type}', '${this.signedToUn(item.d)}', ${item.stickers_new ? "'" + JSON.stringify(item.stickers_new) + "'" : 'NULL'})`,
+                    `(${item.id},${this.signedToUn(item.a)}, ${item.steamid ? "'" + this.signedToUn(item.steamid) + "'" : 'NULL'}, '${date}', '${this.signedToUn(item.current_steamid)}', ${item.stickers ? "'" + JSON.stringify(item.stickers) + "'" : 'NULL'}, '${item.type}', ${item.d ? "'" + this.signedToUn(item.d) + "'" : 'NULL'}, ${item.stickers_new ? "'" + JSON.stringify(item.stickers_new) + "'" : 'NULL'})`,
                 )
             }
 
