@@ -154,8 +154,6 @@ export class ImportModule implements OnModuleInit {
             'SELECT id FROM "history" ORDER BY id DESC LIMIT 1',
         )
 
-        console.log(lastHistoryId)
-
         lastid = 0
 
         if (lastHistoryId.length > 0) {
@@ -173,14 +171,13 @@ export class ImportModule implements OnModuleInit {
 
             const values = []
             for (const item of items) {
-                console.log(item)
                 const date = new Date(item.created_at)
                     .toISOString()
                     .replace('T', ' ')
                     .replace('Z', '')
 
                 values.push(
-                    `(${this.signedToUn(item.a)}, ${item.steamid ? "'" + this.signedToUn(item.steamid) + "'" : 'NULL'}, '${date}', '${this.signedToUn(item.current_steamid)}', ${item.stickers ? "'" + JSON.stringify(item.stickers) + "'" : 'NULL'}, '${item.type}', '${this.signedToUn(item.d)}', ${item.stickers_new ? "'" + JSON.stringify(item.stickers_new) + "'" : 'NULL'})`,
+                    `(${item.id},${this.signedToUn(item.a)}, ${item.steamid ? "'" + this.signedToUn(item.steamid) + "'" : 'NULL'}, '${date}', '${this.signedToUn(item.current_steamid)}', ${item.stickers ? "'" + JSON.stringify(item.stickers) + "'" : 'NULL'}, '${item.type}', '${this.signedToUn(item.d)}', ${item.stickers_new ? "'" + JSON.stringify(item.stickers_new) + "'" : 'NULL'})`,
                 )
             }
 
@@ -194,7 +191,7 @@ export class ImportModule implements OnModuleInit {
                         .filter(Boolean)
                         .map((bulk) =>
                             this.toDataSource.query(
-                                `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                                `INSERT INTO "history" (id, "assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
                             ),
                         ),
                 )
@@ -213,7 +210,7 @@ export class ImportModule implements OnModuleInit {
             await Promise.all(
                 bulks.filter(Boolean).map(async (bulk) => {
                     this.toDataSource.query(
-                        `INSERT INTO "history" ("assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
+                        `INSERT INTO "history" (id, "assetId", "prevOwner", "createdAt", "owner", "prevStickers", type, d, stickers) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`,
                     )
                 }),
             )
