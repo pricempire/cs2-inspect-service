@@ -64,17 +64,48 @@ export class InspectService implements OnModuleInit {
 
     private async loadAccounts(): Promise<string[]> {
         let accounts: string[] = []
+        const accountsFile = process.env.ACCOUNTS_FILE || 'accounts.txt'
 
-        if (fs.existsSync('accounts.txt')) {
-            accounts = fs.readFileSync('accounts.txt', 'utf8').split('\n')
-        } else if (fs.existsSync('../accounts.txt')) {
-            accounts = fs.readFileSync('../accounts.txt', 'utf8').split('\n')
-        } else {
-            throw new Error('accounts.txt not found')
+        try {
+            if (fs.existsSync(accountsFile)) {
+                accounts = fs.readFileSync(accountsFile, 'utf8').split('\n')
+            } else {
+                // Try common fallback locations
+                const fallbackLocations = [
+                    'accounts.txt',
+                    '../accounts.txt',
+                    '/app/accounts.txt'
+                ]
+
+                for (const location of fallbackLocations) {
+                    if (fs.existsSync(location)) {
+                        accounts = fs.readFileSync(location, 'utf8').split('\n')
+                        this.logger.debug(`Found accounts file at fallback location: ${location}`)
+                        break
+                    }
+                }
+
+                if (accounts.length === 0) {
+                    throw new Error(`No accounts file found at ${accountsFile} or fallback locations`)
+                }
+            }
+
+            // Filter out empty lines and trim whitespace
+            accounts = accounts
+                .map(account => account.trim())
+                .filter(account => account.length > 0)
+
+            if (accounts.length === 0) {
+                throw new Error('No valid accounts found in accounts file')
+            }
+
+            this.logger.debug(`Loaded ${accounts.length} accounts`)
+            return accounts
+
+        } catch (error) {
+            this.logger.error(`Failed to load accounts: ${error.message}`)
+            throw error
         }
-
-        this.logger.debug(`Found ${accounts.length} accounts`)
-        return accounts.filter(account => account.trim().length > 0)
     }
 
     private async initializeBot(username: string, password: string) {
