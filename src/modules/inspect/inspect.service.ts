@@ -217,6 +217,7 @@ export class InspectService implements OnModuleInit {
         if (!query.refresh) {
             const cachedAsset = await this.checkCache(a, d)
             if (cachedAsset) {
+                this.cached++
                 return cachedAsset
             }
         } else if (process.env.ALLOW_REFRESH === 'false') {
@@ -236,6 +237,14 @@ export class InspectService implements OnModuleInit {
         // Get available bot
         const bot = await this.getAvailableBot()
         if (!bot) {
+            // Check cache one more time before failing
+            const cachedAsset = await this.checkCache(a, d)
+            if (cachedAsset) {
+                this.cached++
+                this.inspects.delete(a)
+                return cachedAsset
+            }
+
             throw new HttpException('No bots are ready', HttpStatus.FAILED_DEPENDENCY)
         }
 
@@ -271,8 +280,6 @@ export class InspectService implements OnModuleInit {
             this.logger.error(`No inspect data found for item ${response.itemid}`)
             return
         }
-
-        console.log(response)
 
         try {
             // Find history
