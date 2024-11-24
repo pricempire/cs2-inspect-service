@@ -29,7 +29,7 @@ export interface Metadata {
     origin: number;
 }
 
-export interface StickerHistory {
+export interface StickerKeychain {
     slot: number;
     sticker_id: number;
     wear: number | null;
@@ -39,7 +39,7 @@ export interface StickerHistory {
     offset_x: number | null;
     offset_y: number | null;
     offset_z: number | null;
-    pattern: number | null;
+    pattern?: number | null;
 }
 
 export interface FormattedResponse {
@@ -56,7 +56,7 @@ export interface FormattedResponse {
         type: 'Weapon' | 'Sticker' | 'Graffiti' | 'Agent' | 'Keychain';
         rank?: number;
         total_count?: number;
-        stickers?: StickerHistory[];
-        keychains?: StickerHistory[];
+        stickers?: StickerKeychain[];
+        keychains?: StickerKeychain[];
     };
 } 

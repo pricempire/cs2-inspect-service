@@ -1,26 +1,13 @@
+import { StickerKeychain } from 'src/modules/inspect/interfaces/schema.interface'
 import {
     Column,
     CreateDateColumn,
     Entity,
     Index,
     PrimaryColumn,
-    PrimaryGeneratedColumn,
 } from 'typeorm'
 
-interface StickerKeychain {
-    slot: number;
-    sticker_id: number;
-    wear: number | null;
-    scale: number | null;
-    rotation: number | null;
-    tint_id: number | null;
-    offset_x: number | null;
-    offset_y: number | null;
-    offset_z: number | null;
-    pattern: number | null;
-}
 
-@Index('asset_assetId', ['assetId'], { unique: true })
 @Index('asset_ms_assetId_d_stickers', ['ms', 'assetId', 'd', 'stickers'], {
     unique: true,
 })

@@ -1,4 +1,4 @@
-import { StickerHistory } from 'src/modules/inspect/interfaces/schema.interface'
+import { StickerKeychain } from 'src/modules/inspect/interfaces/schema.interface'
 import {
     Column,
     CreateDateColumn,
@@ -69,25 +69,25 @@ export class History {
         type: 'jsonb',
         nullable: true,
     })
-    stickers: StickerHistory[]
+    stickers: StickerKeychain[]
 
     @Column({
         type: 'jsonb',
         nullable: true,
     })
-    prevStickers: StickerHistory[]
+    prevStickers: StickerKeychain[]
 
     @Column({
         type: 'jsonb',
         nullable: true,
     })
-    keychains: StickerHistory[]
+    keychains: StickerKeychain[]
 
     @Column({
         type: 'jsonb',
         nullable: true,
     })
-    prevKeychains: StickerHistory[]
+    prevKeychains: StickerKeychain[]
 
     @CreateDateColumn()
     createdAt: Date
