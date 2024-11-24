@@ -23,10 +23,16 @@ import { Bot } from './bot.class'
 export class InspectService implements OnModuleInit {
     private readonly logger = new Logger(InspectService.name)
     private bots: Map<string, Bot> = new Map()
+    private accounts: string[] = []
     private inspects: Map<string, { ms: string; d: string; resolve: (value: any) => void; reject: (reason?: any) => void }> = new Map()
     private nextBot = 0
     private currentRequests = 0
     private requests: number[] = []
+    private initializedBots = 0
+    private maxConcurrentBots = 3 // Initial bot count
+    private botsToAddWhenNeeded = 3 // Number of bots to add when needed
+    private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
+    private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
 
     private success = 0
     private cached = 0
@@ -45,11 +51,14 @@ export class InspectService implements OnModuleInit {
 
     async onModuleInit() {
         this.logger.debug('Starting Inspect Module...')
-        const accounts = await this.loadAccounts()
+        this.accounts = await this.loadAccounts()
 
-        for (const account of accounts) {
-            const [username, password] = account.split(':')
-            await this.initializeBot(username, password)
+        // Initialize minimum number of bots
+        for (let i = 0; i < this.maxConcurrentBots; i++) {
+            if (this.accounts[i]) {
+                const [username, password] = this.accounts[i].split(':')
+                await this.initializeBot(username, password)
+            }
         }
     }
 
@@ -79,10 +88,57 @@ export class InspectService implements OnModuleInit {
 
             await bot.initialize()
             this.bots.set(username, bot)
+            this.botLastUsedTime.set(username, Date.now()) // Track initial usage time
+            this.initializedBots++
             this.logger.debug(`Bot ${username} initialized successfully`)
         } catch (error) {
             this.logger.error(`Failed to initialize bot ${username}: ${error.message}`)
         }
+    }
+
+    private async initializeAdditionalBots() {
+        const botsToAdd = Math.min(
+            this.botsToAddWhenNeeded,
+            this.accounts.length - this.initializedBots
+        )
+
+        const newBots: Bot[] = []
+        for (let i = 0; i < botsToAdd; i++) {
+            const nextAccountIndex = this.initializedBots
+            if (nextAccountIndex >= this.accounts.length) break
+
+            const [username, password] = this.accounts[nextAccountIndex].split(':')
+            await this.initializeBot(username, password)
+            const newBot = this.bots.get(username)
+            if (newBot) newBots.push(newBot)
+        }
+
+        return newBots.filter(bot => bot?.isReady())
+    }
+
+    private async getAvailableBot(): Promise<Bot | null> {
+        const readyBots = Array.from(this.bots.entries())
+            .filter(([_, bot]) => bot.isReady())
+
+        if (readyBots.length === 0) {
+            // If no bots are ready and we haven't initialized all accounts
+            if (this.initializedBots < this.accounts.length) {
+                const newBots = await this.initializeAdditionalBots()
+                if (newBots.length > 0) {
+                    return newBots[0] // Return the first new bot
+                }
+            }
+            return null
+        }
+
+        // Round-robin selection
+        const [username, bot] = readyBots[this.nextBot % readyBots.length]
+        this.nextBot = (this.nextBot + 1) % readyBots.length
+
+        // Update last used time
+        this.botLastUsedTime.set(username, Date.now())
+
+        return bot
     }
 
     @Cron('* * * * * *')
@@ -91,6 +147,35 @@ export class InspectService implements OnModuleInit {
         this.currentRequests = 0
         if (this.requests.length > 60) {
             this.requests.shift()
+        }
+    }
+
+    @Cron('0 * * * * *') // Run every minute
+    private async cleanupInactiveBots() {
+        const now = Date.now()
+        const botsToRemove: string[] = []
+
+        // Find inactive bots
+        this.botLastUsedTime.forEach((lastUsed, username) => {
+            if (now - lastUsed > this.BOT_INACTIVE_THRESHOLD) {
+                botsToRemove.push(username)
+            }
+        })
+
+        // Remove inactive bots
+        for (const username of botsToRemove) {
+            const bot = this.bots.get(username)
+            if (bot) {
+                try {
+                    await bot.destroy() // Assuming there's a destroy method in Bot class
+                    this.bots.delete(username)
+                    this.botLastUsedTime.delete(username)
+                    this.initializedBots--
+                    this.logger.debug(`Removed inactive bot ${username}`)
+                } catch (error) {
+                    this.logger.error(`Failed to remove bot ${username}: ${error.message}`)
+                }
+            }
         }
     }
 
@@ -178,23 +263,6 @@ export class InspectService implements OnModuleInit {
             return this.formatService.formatResponse(asset)
         }
         return null
-    }
-
-    private async getAvailableBot(): Promise<Bot | null> {
-        const readyBots = Array.from(this.bots.entries())
-            .filter(([_, bot]) => bot.isReady())
-
-        if (readyBots.length === 0) {
-            return null
-        }
-
-        // Round-robin selection
-        const [username, bot] = readyBots[this.nextBot++ % readyBots.length]
-        if (this.nextBot >= readyBots.length) {
-            this.nextBot = 0
-        }
-
-        return bot
     }
 
     private async handleInspectResult(username: string, response: any) {

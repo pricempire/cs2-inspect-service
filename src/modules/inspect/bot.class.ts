@@ -12,6 +12,8 @@ export class Bot {
     private ttl: NodeJS.Timeout | null = null
     private readonly inspectTimeout = 3000 // 3 seconds
     private readonly onHoldTimeout = 60000 // 60 seconds
+    private client: any // Replace 'any' with your actual Steam client type
+    private interval: NodeJS.Timeout | null = null
 
     private readonly loginErrors = {
         61: 'Invalid Password',
@@ -191,5 +193,36 @@ export class Bot {
         this.ready = false
         this.busy = false
         this.onHold = false
+    }
+
+    public async destroy(): Promise<void> {
+        try {
+            // Clear any intervals
+            if (this.interval) {
+                clearInterval(this.interval)
+                this.interval = null
+            }
+
+            // Logout and disconnect from Steam
+            if (this.client) {
+                await new Promise<void>((resolve) => {
+                    this.client.logOff()
+                    this.client.once('disconnected', () => {
+                        resolve()
+                    })
+
+                    // Fallback timeout in case disconnect event doesn't fire
+                    setTimeout(resolve, 5000)
+                })
+            }
+
+            // Reset state
+            this.ready = false
+            this.client = null
+
+        } catch (error) {
+            console.error(`Error destroying bot: ${error.message}`)
+            throw error
+        }
     }
 }
