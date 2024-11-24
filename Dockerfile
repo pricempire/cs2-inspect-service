@@ -1,23 +1,34 @@
-# Use the official Node.js 14 image as the base image
-FROM node:20
+# Stage 1: Build with pnpm
+FROM node:20 as build
 
-# Set the working directory inside the container
+# Set working directory
 WORKDIR /app
 
-# Copy the package.json and package-lock.json files to the working directory
+# Copy package files
 COPY package.json package-lock.json ./
 
-# Install pnpm globally
-RUN npm install -g pnpm
+# Install pnpm and dependencies
+RUN npm install -g pnpm && pnpm install --frozen-lockfile
 
-# Install project dependencies using pnpm
-RUN pnpm install
-
-# Copy the rest of the application code to the working directory
+# Copy source code
 COPY . .
 
-# Expose the port on which the application will run
+# Build the application
+RUN pnpm build
+
+# Stage 2: Serve with Bun
+FROM oven/bun:latest as serve
+
+# Set working directory
+WORKDIR /app
+
+# Copy built files and dependencies from build stage
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./
+
+# Expose port
 EXPOSE 3000
 
-# Start the application
-CMD ["pnpm", "start"]
+# Start with Bun
+CMD ["sh", "-c", "bun run dist/main.js"]
