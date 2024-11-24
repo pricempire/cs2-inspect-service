@@ -1,3 +1,4 @@
+import { StickerHistory } from 'src/modules/inspect/interfaces/schema.interface'
 import {
     Column,
     CreateDateColumn,
@@ -19,16 +20,12 @@ export enum HistoryType {
     STICKER_CHANGE = 9,
 }
 
+
 @Entity()
-@Index('history_owner_prevOwner', ['owner', 'prevOwner'])
-@Index('history_assetId_prevAssetId', ['assetId', 'prevAssetId'])
-@Index('history_assetId', ['assetId'])
-@Index('history_prevAssetId', ['prevAssetId'])
-@Index('history_owner', ['owner'])
-@Index('history_prevOwner', ['prevOwner'])
-@Index('history_d', ['d'])
-@Index('history_type', ['type'])
-@Index('history_createdAt', ['createdAt'])
+@Index('history_asset_tracking', ['assetId', 'prevAssetId'])
+@Index('history_ownership', ['owner', 'prevOwner'])
+@Index('history_timeline', ['createdAt', 'type'])
+@Index('history_details', ['d', 'type'])
 export class History {
     @PrimaryGeneratedColumn({
         type: 'bigint',
@@ -41,11 +38,14 @@ export class History {
     assetId: number
 
     @Column({
+        type: 'bigint',
         nullable: true,
     })
     prevAssetId: number
 
-    @Column()
+    @Column({
+        type: 'smallint',
+    })
     type: HistoryType
 
     @Column({
@@ -61,6 +61,7 @@ export class History {
 
     @Column({
         nullable: true,
+        length: 64,
     })
     d: string
 
@@ -68,13 +69,25 @@ export class History {
         type: 'jsonb',
         nullable: true,
     })
-    stickers: any[]
+    stickers: StickerHistory[]
 
     @Column({
         type: 'jsonb',
         nullable: true,
     })
-    prevStickers: any[]
+    prevStickers: StickerHistory[]
+
+    @Column({
+        type: 'jsonb',
+        nullable: true,
+    })
+    keychains: StickerHistory[]
+
+    @Column({
+        type: 'jsonb',
+        nullable: true,
+    })
+    prevKeychains: StickerHistory[]
 
     @CreateDateColumn()
     createdAt: Date

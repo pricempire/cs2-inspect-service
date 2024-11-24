@@ -3,42 +3,35 @@ import {
     CreateDateColumn,
     Entity,
     Index,
+    PrimaryColumn,
     PrimaryGeneratedColumn,
 } from 'typeorm'
 
+interface StickerKeychain {
+    slot: number;
+    sticker_id: number;
+    wear: number | null;
+    scale: number | null;
+    rotation: number | null;
+    tint_id: number | null;
+    offset_x: number | null;
+    offset_y: number | null;
+    offset_z: number | null;
+    pattern: number | null;
+}
+
+@Index('asset_assetId', ['assetId'], { unique: true })
 @Index('asset_ms_assetId_d_stickers', ['ms', 'assetId', 'd', 'stickers'], {
     unique: true,
 })
-@Index('paintSeed_paintIndex_paintWear', [
-    'paintSeed',
-    'paintIndex',
-    'paintWear',
-])
-@Index('asset_ms', ['ms'])
-@Index('asset_assetId', ['assetId'])
-@Index('asset_d', ['d'])
-@Index('asset_paintSeed', ['paintSeed'])
-@Index('asset_paintIndex', ['paintIndex'])
-@Index('asset_paintWear', ['paintWear'])
-@Index('asset_customName', ['customName'])
-@Index('asset_defIndex', ['defIndex'])
-@Index('asset_origin', ['origin'])
-@Index('asset_rarity', ['rarity'])
-@Index('asset_questId', ['questId'])
-@Index('asset_reason', ['reason'])
-@Index('asset_musicIndex', ['musicIndex'])
-@Index('asset_entIndex', ['entIndex'])
-@Index('asset_isStattrak', ['isStattrak'])
-@Index('asset_isSouvenir', ['isSouvenir'])
-@Index('asset_stickers', ['stickers'])
+@Index('asset_paint_details', ['paintSeed', 'paintIndex', 'paintWear'])
+@Index('asset_item_details', ['defIndex', 'quality', 'rarity', 'origin'])
+@Index('asset_special_flags', ['isStattrak', 'isSouvenir'])
+@Index('asset_custom_details', ['customName', 'questId', 'reason'])
+@Index('asset_misc', ['musicIndex', 'entIndex'])
 @Entity()
 export class Asset {
-    @PrimaryGeneratedColumn({
-        type: 'bigint',
-    })
-    id: number
-
-    @Column({
+    @PrimaryColumn({
         type: 'bigint',
     })
     assetId: number
@@ -137,7 +130,42 @@ export class Asset {
         type: 'jsonb',
         nullable: true,
     })
-    stickers: any[]
+    stickers: StickerKeychain[]
+
+    @Column({
+        type: 'jsonb',
+        nullable: true,
+    })
+    keychains: StickerKeychain[]
+
+    @Column({
+        nullable: true,
+        type: 'smallint',
+    })
+    killeaterScoreType: number
+
+    @Column({
+        nullable: true,
+        type: 'integer',
+    })
+    killeaterValue: number
+
+    @Column({
+        nullable: true,
+        type: 'smallint',
+    })
+    petIndex: number
+
+    @Column({
+        type: 'smallint',
+    })
+    inventory: number
+
+    @Column({
+        nullable: true,
+        type: 'smallint',
+    })
+    dropReason: number
 
     @CreateDateColumn()
     createdAt: Date

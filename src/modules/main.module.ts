@@ -1,4 +1,5 @@
 import { Logger, Module } from '@nestjs/common'
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm'
 import { InspectModule } from './inspect/inspect.module'
 import { Cron, ScheduleModule } from '@nestjs/schedule'
@@ -14,16 +15,8 @@ import { DataSource } from 'typeorm'
             username: process.env.POSTGRESQL_USER,
             password: process.env.POSTGRESQL_PASSWORD,
             database: process.env.POSTGRESQL_DB,
-            // cache: {
-            //     type: 'redis',
-            //     options: {
-            //         host: process.env.REDIS_HOST,
-            //         port: process.env.REDIS_PORT,
-            //         password: process.env.REDIS_PASSWORD,
-            //     },
-            //     duration: 5 * 60 * 1000,
-            // },
             entities: [__dirname + '/../**/*.{entity,view}.{js,ts}'],
+            namingStrategy: new SnakeNamingStrategy(),
             logging: process.env.POSTGRESQL_LOGGING === 'true',
             autoLoadEntities: true,
             synchronize: true,
@@ -34,7 +27,7 @@ import { DataSource } from 'typeorm'
 })
 export class MainModule {
     private readonly logger = new Logger(MainModule.name)
-    constructor(@InjectDataSource() private dataSource: DataSource) {}
+    constructor(@InjectDataSource() private dataSource: DataSource) { }
 
     // This method is called every hour to refresh the materialized view
     @Cron('0 0 * * * *')
