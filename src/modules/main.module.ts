@@ -3,8 +3,8 @@ import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm'
 import { InspectModule } from './inspect/inspect.module'
 import { Cron, ScheduleModule } from '@nestjs/schedule'
-import 'dotenv/config'
 import { DataSource } from 'typeorm'
+import 'dotenv/config'
 
 @Module({
     imports: [

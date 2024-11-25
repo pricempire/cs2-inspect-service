@@ -19,4 +19,4 @@ import { Rankings } from 'src/views/rankings.view'
     providers: [InspectService, ParseService, FormatService],
     controllers: [InspectController],
 })
-export class InspectModule {}
+export class InspectModule { }
