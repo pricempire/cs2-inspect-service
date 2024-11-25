@@ -6,6 +6,9 @@ import { Cron, ScheduleModule } from '@nestjs/schedule'
 import { DataSource } from 'typeorm'
 import 'dotenv/config'
 
+
+console.log(process.env);
+
 @Module({
     imports: [
         TypeOrmModule.forRoot({
