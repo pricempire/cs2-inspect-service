@@ -31,4 +31,4 @@ COPY --from=build /app/package.json ./
 EXPOSE 3000
 
 # Start with Bun
-CMD ["sh", "-c", "bun run dist/main.js"]
+CMD ["sh", "-c", "bun run dist/${APP_NAME}.js"]

@@ -29,7 +29,9 @@ export class MainModule {
     private readonly logger = new Logger(MainModule.name)
     constructor(@InjectDataSource() private dataSource: DataSource) { }
 
-    // This method is called every hour to refresh the materialized view
+    /**
+     * Refresh the materialized view "rankings"
+     */
     @Cron('0 0 * * * *')
     async handleCron() {
         this.logger.debug('Refreshing materialized view "rankings"')

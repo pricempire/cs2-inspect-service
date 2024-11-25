@@ -2,6 +2,7 @@ import { Logger, Module, OnModuleInit } from '@nestjs/common'
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm'
 import { DataSource } from 'typeorm'
 import 'dotenv/config'
+import { createHash } from 'crypto'
 
 @Module({
     imports: [
@@ -101,6 +102,7 @@ export class ImportModule implements OnModuleInit {
             const values = []
 
             for await (const item of items) {
+
                 const buf = Buffer.alloc(4)
                 buf.writeInt32BE(item.paintwear, 0)
                 const float = buf.readFloatBE(0)
@@ -113,8 +115,19 @@ export class ImportModule implements OnModuleInit {
 
                 const convertedStickers = this.convertStickers(item.stickers)
 
+                const uniqueId = this.generateUniqueId({
+                    paintSeed: item.paintseed,
+                    paintIndex: item.paintindex,
+                    paintWear: item.paintwear,
+                    defIndex: item.defindex,
+                    origin: props.origin,
+                    rarity: props.rarity,
+                    quality: props.quality,
+                    dropReason: item.reason
+                });
+
                 values.push(
-                    `(${this.signedToUn(item.ms)}, ${item.floatid}, ${item.d ? "'" + this.signedToUn(item.d) + "'" : 'NULL'
+                    `(${uniqueId}, ${this.signedToUn(item.ms)}, ${item.a}, ${item.d ? "'" + this.signedToUn(item.d) + "'" : 'NULL'
                     }, ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex
                     }, ${item.stattrak === '1' ? true : false}, ${item.souvenir === '1' ? true : false
                     }, ${convertedStickers
@@ -136,7 +149,7 @@ export class ImportModule implements OnModuleInit {
                         .filter(Boolean)
                         .map((bulk) =>
                             this.toDataSource.query(
-                                `INSERT INTO "asset" (ms, asset_id, d, paint_seed, paint_wear, def_index, paint_index, is_stattrak, is_souvenir, stickers, created_at, rarity, quality, origin, custom_name, quest_id, reason, music_index, ent_index, keychains, killeater_score_type, killeater_value, pet_index, inventory) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`
+                                `INSERT INTO "asset" (unique_id, ms, asset_id, d, paint_seed, paint_wear, def_index, paint_index, is_stattrak, is_souvenir, stickers, created_at, rarity, quality, origin, custom_name, quest_id, reason, music_index, ent_index, keychains, killeater_score_type, killeater_value, pet_index, inventory) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`
                             )
                         )
                 )
@@ -151,6 +164,7 @@ export class ImportModule implements OnModuleInit {
         // Rest of the code remains the same...
     }
 
+    // not working yet
     private async importHistory() {
         const count = await this.fromDataSource.query(
             'SELECT COUNT(id) FROM "history"'
@@ -216,7 +230,7 @@ export class ImportModule implements OnModuleInit {
                         .filter(Boolean)
                         .map((bulk) =>
                             this.toDataSource.query(
-                                `INSERT INTO "history" (id, "assetId", "prevAssetId", type, owner, "prevOwner", d, stickers, "prevStickers", keychains, "prevKeychains", "createdAt") VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`
+                                `INSERT INTO "history" (unique_id, asset_id, prev_asset_id, type, owner, prev_owner, d, stickers, prev_stickers, keychains, prev_keychains, created_at) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`
                             )
                         )
                 )
@@ -227,6 +241,37 @@ export class ImportModule implements OnModuleInit {
 
             offset += this.limit
         }
+    }
+
+    /**
+     * Generate a unique ID for an asset
+     * @param item 
+     * @returns 
+     */
+    private generateUniqueId(item: {
+        paintSeed?: number,
+        paintIndex?: number,
+        paintWear?: number,
+        defIndex?: number,
+        origin?: number,
+        rarity?: number,
+        questId?: number,
+        quality?: number,
+        dropReason?: number
+    }): string {
+        const values = [
+            item.paintSeed || 0,
+            item.paintIndex || 0,
+            item.paintWear || 0,
+            item.defIndex || 0,
+            item.origin || 0,
+            item.rarity || 0,
+            item.questId || 0,
+            item.quality || 0,
+            item.dropReason || 0
+        ];
+        const stringToHash = values.join('-');
+        return createHash('sha1').update(stringToHash).digest('hex').substring(0, 8);
     }
 
     private signedToUn(num) {
