@@ -11,6 +11,7 @@ import {
 @Index('asset_ms_assetId_d_stickers', ['ms', 'assetId', 'd', 'stickers'], {
     unique: true,
 })
+@Index('asset_unique_id', ['uniqueId'])
 @Index('asset_paint_details', ['paintSeed', 'paintIndex', 'paintWear'])
 @Index('asset_item_details', ['defIndex', 'quality', 'rarity', 'origin'])
 @Index('asset_special_flags', ['isStattrak', 'isSouvenir'])
@@ -18,6 +19,9 @@ import {
 @Index('asset_misc', ['musicIndex', 'entIndex'])
 @Entity()
 export class Asset {
+    @Column()
+    uniqueId: string;
+
     @PrimaryColumn({
         type: 'bigint',
     })

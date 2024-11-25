@@ -22,15 +22,14 @@ export enum HistoryType {
 
 
 @Entity()
+@Index('history_unique_id', ['uniqueId'])
 @Index('history_asset_tracking', ['assetId', 'prevAssetId'])
 @Index('history_ownership', ['owner', 'prevOwner'])
 @Index('history_timeline', ['createdAt', 'type'])
 @Index('history_details', ['d', 'type'])
 export class History {
-    @PrimaryGeneratedColumn({
-        type: 'bigint',
-    })
-    id: number
+    @Column()
+    uniqueId: string;
 
     @PrimaryColumn({
         type: 'bigint',
