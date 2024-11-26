@@ -211,9 +211,8 @@ export class InspectService implements OnModuleInit {
      */
     private async initializeBot(username: string, password: string) {
         try {
-            // Calculate which session this bot should use
-            const sessionNumber = Math.floor(this.initializedBots / this.ACCOUNTS_PER_SESSION)
-            const proxyUrl = process.env.PROXY_URL?.replace('[session]', sessionNumber.toString())
+            // Calculate which session this bot should use 
+            const proxyUrl = process.env.PROXY_URL
 
             const bot = new Bot(
                 username,
@@ -226,7 +225,7 @@ export class InspectService implements OnModuleInit {
             this.bots.set(username, bot)
             this.botLastUsedTime.set(username, Date.now())
             this.initializedBots++
-            this.logger.debug(`Bot ${username} initialized successfully with session ${sessionNumber}`)
+            this.logger.debug(`Bot ${username} initialized successfully`)
         } catch (error) {
             this.logger.error(`Failed to initialize bot ${username}: ${error.message}`)
         }
@@ -261,27 +260,28 @@ export class InspectService implements OnModuleInit {
      * @returns 
      */
     private async getAvailableBot(): Promise<Bot | null> {
-        // First check for any ready bots
         const readyBots = Array.from(this.bots.entries())
             .filter(([_, bot]) => bot.isReady())
 
-        if (readyBots.length > 0) {
-            // Use existing ready bot with round-robin selection
-            const [username, bot] = readyBots[this.nextBot % readyBots.length]
-            this.nextBot = (this.nextBot + 1) % readyBots.length
-            this.botLastUsedTime.set(username, Date.now())
-            return bot
-        }
-
-        // Only initialize new bots if we have no ready bots and haven't reached account limit
-        if (this.bots.size < this.accounts.length) {
-            const newBots = await this.initializeAdditionalBots()
-            if (newBots.length > 0) {
-                return newBots[0]
+        if (readyBots.length === 0) {
+            // If no bots are ready and we haven't initialized all accounts
+            if (this.initializedBots < this.accounts.length) {
+                const newBots = await this.initializeAdditionalBots()
+                if (newBots.length > 0) {
+                    return newBots[0] // Return the first new bot
+                }
             }
+            return null
         }
 
-        return null
+        // Round-robin selection
+        const [username, bot] = readyBots[this.nextBot % readyBots.length]
+        this.nextBot = (this.nextBot + 1) % readyBots.length
+
+        // Update last used time
+        this.botLastUsedTime.set(username, Date.now())
+
+        return bot
     }
 
     /**

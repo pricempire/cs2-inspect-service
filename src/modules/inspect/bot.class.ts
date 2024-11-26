@@ -43,11 +43,13 @@ export class Bot {
             this.steamUser.removeAllListeners()
         }
 
+        const proxyUrl = this.proxyUrl.replace('[session]', this.username.toString())
+
         this.steamUser = new SteamUser({
             promptSteamGuardCode: false,
             enablePicsCache: true,
-            httpProxy: this.proxyUrl.startsWith('http://') ? this.proxyUrl : null,
-            socksProxy: this.proxyUrl.startsWith('socks5://') ? this.proxyUrl : null,
+            httpProxy: proxyUrl.startsWith('http://') ? proxyUrl : null,
+            socksProxy: proxyUrl.startsWith('socks5://') ? proxyUrl : null,
         })
 
         this.setupSteamUserEvents()
@@ -68,8 +70,8 @@ export class Bot {
                 err.toString().includes('Proxy connection timed out') ||
                 err.toString().includes('RateLimit') ||
                 err.toString().includes('Bad Gateway') ||
-                err.toString().includes('AccountLoginDeniedThrottle') ||
-                err.toString().includes('NetworkUnreachable')
+                err.toString().includes('NetworkUnreachable') ||
+                err.toString().includes('ECONNREFUSED')
             ) {
                 this.initialize() // Reinitialize on these errors
             }
