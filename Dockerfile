@@ -9,6 +9,6 @@ COPY . .
 RUN pnpm build
 
 EXPOSE 3000
-CMD ["node", "dist/${APP_NAME}.js"]
+CMD ["sh", "-c", "node dist/${APP_NAME}.js"]
 
 # remove bun because of prod issues
