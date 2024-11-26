@@ -242,7 +242,7 @@ export class InspectService implements OnModuleInit {
     private async initializeAdditionalBots() {
         // Check if initialization is already in progress
         if (this.initializationInProgress) {
-            this.logger.debug('Bot initialization already in progress, skipping...');
+            // this.logger.debug('Bot initialization already in progress, skipping...');
             return [];
         }
 
