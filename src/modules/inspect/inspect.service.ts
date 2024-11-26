@@ -77,7 +77,7 @@ export class InspectService implements OnModuleInit {
 
         // Set initial bots as ready if we have enough ready bots
         const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
-        this.initialBotsReady = readyBots >= this.maxConcurrentBots * 0.8; // 80% of bots should be ready
+        this.initialBotsReady = readyBots >= this.maxConcurrentBots * 0.6; // 60% of bots should be ready
     }
 
     /**
@@ -87,24 +87,56 @@ export class InspectService implements OnModuleInit {
     public stats() {
         const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length
         const busyBots = Array.from(this.bots.values()).filter(bot => !bot.isReady()).length
+        const totalBots = this.bots.size
+        const queueUtilization = (this.inspects.size / this.MAX_QUEUE_SIZE) * 100
+
+        // Calculate average request processing time
+        const activeInspects = Array.from(this.inspects.values())
+        const processingTimes = activeInspects
+            .filter(inspect => inspect.startTime)
+            .map(inspect => Date.now() - inspect.startTime)
+        const avgProcessingTime = processingTimes.length > 0
+            ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length
+            : 0
 
         return {
-            ready: readyBots,
-            busy: busyBots,
-            pending: this.inspects.size,
-            success: {
-                rate: this.success / (this.success + this.failed + this.cached),
-                count: this.success,
+            status: this.initialBotsReady ? 'ready' : 'initializing',
+            bots: {
+                ready: readyBots,
+                busy: busyBots,
+                total: totalBots,
+                initialized: this.initializedBots,
+                maxConcurrent: this.maxConcurrentBots,
+                utilization: (totalBots > 0 ? (busyBots / totalBots) * 100 : 0).toFixed(2) + '%'
             },
-            cached: {
-                rate: this.cached / (this.success + this.failed + this.cached),
-                count: this.cached,
+            queue: {
+                current: this.inspects.size,
+                max: this.MAX_QUEUE_SIZE,
+                utilization: queueUtilization.toFixed(2) + '%',
+                avgProcessingTime: Math.round(avgProcessingTime) + 'ms'
             },
-            failed: {
-                rate: this.failed / (this.success + this.failed + this.cached),
-                count: this.failed,
+            metrics: {
+                success: {
+                    rate: ((this.success / (this.success + this.failed + this.cached)) * 100).toFixed(2) + '%',
+                    count: this.success,
+                },
+                cached: {
+                    rate: ((this.cached / (this.success + this.failed + this.cached)) * 100).toFixed(2) + '%',
+                    count: this.cached,
+                },
+                failed: {
+                    rate: ((this.failed / (this.success + this.failed + this.cached)) * 100).toFixed(2) + '%',
+                    count: this.failed,
+                },
+                total: this.success + this.failed + this.cached
             },
-            requests: this.requests,
+            requests: {
+                history: this.requests,
+                current: this.currentRequests,
+                average: this.requests.length > 0
+                    ? (this.requests.reduce((a, b) => a + b, 0) / this.requests.length).toFixed(2)
+                    : 0
+            }
         }
     }
 
