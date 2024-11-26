@@ -79,6 +79,8 @@ export class FormatService implements OnModuleInit {
             quality: asset.quality,
             rarity: asset.rarity,
             origin: asset.origin,
+            paintSeed: asset.paintSeed,
+            paintWear: asset.paintWear,
         }
     }
 
@@ -199,7 +201,8 @@ export class FormatService implements OnModuleInit {
                 rarity: asset.rarity,
                 quality: asset.quality,
                 origin: asset.origin,
-                wear: asset.paintWear,
+                paintwear: asset.paintWear,
+                paintseed: meta.paintSeed,
                 wear_name: meta.wear,
                 market_hash_name: this.buildMarketHashName(weapon, paint, meta),
                 stickers: asset.stickers.map((sticker) => ({
@@ -217,6 +220,8 @@ export class FormatService implements OnModuleInit {
                 type: 'Weapon',
                 rank: meta.rank,
                 total_count: meta.totalCount,
+                souvenir: meta.quality === 12,
+                stattrak: meta.quality === 9,
             },
         }
     }

@@ -27,6 +27,8 @@ export interface Metadata {
     quality: number;
     rarity: number;
     origin: number;
+    paintSeed: number;
+    paintWear: number;
 }
 
 export interface StickerKeychain {
@@ -49,9 +51,12 @@ export interface FormattedResponse {
         rarity: number;
         quality: number;
         origin: number;
-        wear?: number;
+        paintwear?: number;
+        paintseed?: number;
         wear_name?: string;
         market_hash_name: string;
+        souvenir?: boolean;
+        stattrak?: boolean;
         image?: string;
         type: 'Weapon' | 'Sticker' | 'Graffiti' | 'Agent' | 'Keychain';
         rank?: number;
