@@ -34,13 +34,15 @@ export class InspectService implements OnModuleInit {
     private botsToAddWhenNeeded = 3 // Number of bots to add when needed
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
+    private readonly BOT_INIT_DELAY = 5000; // 5 seconds delay between bot initializations
 
     private success = 0
     private cached = 0
     private failed = 0
 
-    // Add new class property to track sessions 
-    private readonly ACCOUNTS_PER_SESSION = 5
+    private initializationInProgress = false;
+    private readonly DEBOUNCE_DELAY = 30000; // 30 seconds debounce
+    private lastInitializationTime = 0;
 
     constructor(
         private parseService: ParseService,
@@ -57,11 +59,13 @@ export class InspectService implements OnModuleInit {
         this.logger.debug('Starting Inspect Module...')
         this.accounts = await this.loadAccounts()
 
-        // Initialize minimum number of bots
+        // Initialize minimum number of bots with delay
         for (let i = 0; i < this.maxConcurrentBots; i++) {
             if (this.accounts[i]) {
                 const [username, password] = this.accounts[i].split(':')
                 await this.initializeBot(username, password)
+                // Add delay between initializations
+                await new Promise(resolve => setTimeout(resolve, this.BOT_INIT_DELAY))
             }
         }
     }
@@ -232,27 +236,50 @@ export class InspectService implements OnModuleInit {
     }
 
     /**
-     * Initialize additional bots
+     * Initialize additional bots with debounce
      * @returns 
      */
     private async initializeAdditionalBots() {
-        const botsToAdd = Math.min(
-            this.botsToAddWhenNeeded,
-            this.accounts.length - this.initializedBots
-        )
-
-        const newBots: Bot[] = []
-        for (let i = 0; i < botsToAdd; i++) {
-            const nextAccountIndex = this.initializedBots
-            if (nextAccountIndex >= this.accounts.length) break
-
-            const [username, password] = this.accounts[nextAccountIndex].split(':')
-            await this.initializeBot(username, password)
-            const newBot = this.bots.get(username)
-            if (newBot) newBots.push(newBot)
+        // Check if initialization is already in progress
+        if (this.initializationInProgress) {
+            this.logger.debug('Bot initialization already in progress, skipping...');
+            return [];
         }
 
-        return newBots.filter(bot => bot?.isReady())
+        // Check debounce time
+        const now = Date.now();
+        if (now - this.lastInitializationTime < this.DEBOUNCE_DELAY) {
+            this.logger.debug('Initialization requested too soon, skipping...');
+            return [];
+        }
+
+        try {
+            this.initializationInProgress = true;
+            this.lastInitializationTime = now;
+
+            const botsToAdd = Math.min(
+                this.botsToAddWhenNeeded,
+                this.accounts.length - this.initializedBots
+            )
+
+            this.logger.debug(`Initializing ${botsToAdd} additional bots...`);
+
+            const newBots: Bot[] = []
+            for (let i = 0; i < botsToAdd; i++) {
+                const nextAccountIndex = this.initializedBots
+                if (nextAccountIndex >= this.accounts.length) break
+
+                const [username, password] = this.accounts[nextAccountIndex].split(':')
+                await this.initializeBot(username, password)
+                await new Promise(resolve => setTimeout(resolve, this.BOT_INIT_DELAY))
+                const newBot = this.bots.get(username)
+                if (newBot) newBots.push(newBot)
+            }
+
+            return newBots.filter(bot => bot?.isReady())
+        } finally {
+            this.initializationInProgress = false;
+        }
     }
 
     /**
