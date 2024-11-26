@@ -44,8 +44,8 @@ export class InspectService implements OnModuleInit {
     private readonly DEBOUNCE_DELAY = 10000; // 10 seconds debounce
     private lastInitializationTime = 0;
 
-    private readonly QUEUE_TIMEOUT = 30000; // 30 seconds timeout
-    private readonly MAX_RETRIES = 2; // Add max retries constant
+    private readonly QUEUE_TIMEOUT = 5000; // 5 seconds timeout
+    private readonly MAX_RETRIES = 3; // Add max retries constant
 
     // Add new property to track initial bots ready state
     private initialBotsReady = false;
