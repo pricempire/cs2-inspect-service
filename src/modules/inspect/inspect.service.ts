@@ -25,7 +25,7 @@ export class InspectService implements OnModuleInit {
     private readonly logger = new Logger(InspectService.name)
     private bots: Map<string, Bot> = new Map()
     private accounts: string[] = []
-    private inspects: Map<string, { ms: string; d: string; resolve: (value: any) => void; reject: (reason?: any) => void; timeoutId: NodeJS.Timeout; startTime?: number }> = new Map()
+    private inspects: Map<string, { ms: string; d: string; resolve: (value: any) => void; reject: (reason?: any) => void; timeoutId: NodeJS.Timeout; startTime?: number; retryCount?: number }> = new Map()
     private nextBot = 0
     private currentRequests = 0
     private requests: number[] = []
@@ -44,8 +44,8 @@ export class InspectService implements OnModuleInit {
     private readonly DEBOUNCE_DELAY = 3000; // 30 seconds debounce
     private lastInitializationTime = 0;
 
-    private readonly MAX_QUEUE_SIZE = 100 // Add max queue size constant
     private readonly QUEUE_TIMEOUT = 30000; // 30 seconds timeout
+    private readonly MAX_RETRIES = 2; // Add max retries constant
 
     constructor(
         private parseService: ParseService,
@@ -108,7 +108,10 @@ export class InspectService implements OnModuleInit {
      */
     public async inspectItem(query: InspectDto) {
         if (this.inspects.size >= this.MAX_QUEUE_SIZE) {
-            throw new HttpException('Queue is full, please try again later', HttpStatus.TOO_MANY_REQUESTS)
+            throw new HttpException(
+                `Queue is full (${this.inspects.size}/${this.MAX_QUEUE_SIZE}), please try again later`,
+                HttpStatus.TOO_MANY_REQUESTS
+            )
         }
 
         this.currentRequests++
@@ -131,56 +134,73 @@ export class InspectService implements OnModuleInit {
             throw new HttpException('Refresh is not allowed', HttpStatus.FORBIDDEN)
         }
 
-        // Get available bot first to fail fast if none available
-        const bot = await this.getAvailableBot()
-        if (!bot) {
-            // Check cache one more time before failing
-            const cachedAsset = await this.checkCache(a, d)
-            if (cachedAsset) {
-                this.cached++
-                return cachedAsset
-            }
-
-            throw new HttpException('No bots are ready', HttpStatus.FAILED_DEPENDENCY)
-        }
-
-        // Store inspect details with promise handlers and timeout
         const resultPromise = new Promise((resolve, reject) => {
-            // Set timeout to automatically remove from queue
-            const timeoutId = setTimeout(() => {
-                this.inspects.delete(a)
-                this.failed++
-                reject(new HttpException('Inspection request timed out', HttpStatus.REQUEST_TIMEOUT))
-            }, this.QUEUE_TIMEOUT)
+            const attemptInspection = async (retryCount = 0) => {
+                // Get a new bot for each attempt
+                const bot = await this.getAvailableBot()
+                if (!bot) {
+                    // Check cache one more time before failing
+                    const cachedAsset = await this.checkCache(a, d)
+                    if (cachedAsset) {
+                        this.cached++
+                        return resolve(cachedAsset)
+                    }
+                    return reject(new HttpException('No bots are ready', HttpStatus.FAILED_DEPENDENCY))
+                }
 
-            this.inspects.set(a, {
-                ms: m !== '0' ? m : s,
-                d,
-                resolve: (value: any) => {
-                    clearTimeout(timeoutId)
-                    resolve(value)
-                },
-                reject: (reason?: any) => {
-                    clearTimeout(timeoutId)
-                    reject(reason)
-                },
-                timeoutId, // Store timeoutId to clear it if needed
-            })
-        })
+                const timeoutId = setTimeout(async () => {
+                    if (retryCount < this.MAX_RETRIES) {
+                        this.logger.warn(`Inspection request timed out with bot ${bot.username}, attempting retry ${retryCount + 1} for asset ${a}`);
+                        clearTimeout(timeoutId);
+                        this.inspects.delete(a);
+                        await attemptInspection(retryCount + 1);
+                    } else {
+                        this.inspects.delete(a);
+                        this.failed++;
+                        reject(new HttpException('Inspection request timed out after retries', HttpStatus.REQUEST_TIMEOUT));
+                    }
+                }, this.QUEUE_TIMEOUT);
 
-        // Trigger inspection
-        try {
-            await bot.inspectItem(s !== '0' ? s : m, a, d)
-            return resultPromise
-        } catch (error) {
-            const inspect = this.inspects.get(a)
-            if (inspect?.timeoutId) {
-                clearTimeout(inspect.timeoutId)
-            }
-            this.failed++
-            this.inspects.delete(a)
-            throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR)
-        }
+                this.inspects.set(a, {
+                    ms: m !== '0' ? m : s,
+                    d,
+                    resolve: (value: any) => {
+                        clearTimeout(timeoutId);
+                        resolve(value);
+                    },
+                    reject: (reason?: any) => {
+                        clearTimeout(timeoutId);
+                        reject(reason);
+                    },
+                    timeoutId,
+                    startTime: Date.now(),
+                    retryCount,
+                });
+
+                try {
+                    await bot.inspectItem(s !== '0' ? s : m, a, d)
+                } catch (error) {
+                    if (retryCount < this.MAX_RETRIES) {
+                        this.logger.warn(`Bot inspection failed, attempting retry ${retryCount + 1} for asset ${a}`);
+                        clearTimeout(timeoutId);
+                        this.inspects.delete(a);
+                        await attemptInspection(retryCount + 1);
+                    } else {
+                        const inspect = this.inspects.get(a)
+                        if (inspect?.timeoutId) {
+                            clearTimeout(inspect.timeoutId)
+                        }
+                        this.failed++
+                        this.inspects.delete(a)
+                        reject(new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR))
+                    }
+                }
+            };
+
+            attemptInspection();
+        });
+
+        return resultPromise;
     }
     /**
      * Load accounts
@@ -694,5 +714,10 @@ export class InspectService implements OnModuleInit {
                 this.logger.warn(`Cleaned up stale request for asset ${assetId}`)
             }
         }
+    }
+
+    // Remove the static MAX_QUEUE_SIZE constant and add a getter
+    private get MAX_QUEUE_SIZE(): number {
+        return this.bots.size || this.maxConcurrentBots; // Fallback to initial bot count if no bots yet
     }
 }

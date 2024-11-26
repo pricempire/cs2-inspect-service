@@ -14,7 +14,7 @@ export class Bot {
     private readonly onHoldTimeout = 60000 // 60 seconds
     private client: any // Replace 'any' with your actual Steam client type
     private interval: NodeJS.Timeout | null = null
-    private readonly graceTimeout = 20000 // 20 seconds grace period
+    private readonly graceTimeout = 20000 // 20 seconds grace period 
 
     private readonly loginErrors = {
         61: 'Invalid Password',
@@ -24,7 +24,7 @@ export class Bot {
     }
 
     constructor(
-        private readonly username: string,
+        public readonly username: string,
         private readonly password: string,
         private readonly proxyUrl: string,
         private readonly onInspectResult: (response: any) => void,
