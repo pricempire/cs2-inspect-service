@@ -23,6 +23,7 @@ import { createHash } from 'crypto';
 @Injectable()
 export class InspectService implements OnModuleInit {
     private readonly logger = new Logger(InspectService.name)
+    private startTime: number = Date.now()
     private bots: Map<string, Bot> = new Map()
     private accounts: string[] = []
     private inspects: Map<string, { ms: string; d: string; resolve: (value: any) => void; reject: (reason?: any) => void; timeoutId: NodeJS.Timeout; startTime?: number; retryCount?: number }> = new Map()
@@ -104,6 +105,13 @@ export class InspectService implements OnModuleInit {
         const totalBots = this.bots.size
         const queueUtilization = (this.inspects.size / this.MAX_QUEUE_SIZE) * 100
 
+        // Calculate uptime in milliseconds
+        const uptime = Date.now() - this.startTime
+        const days = Math.floor(uptime / (24 * 60 * 60 * 1000))
+        const hours = Math.floor((uptime % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000))
+        const minutes = Math.floor((uptime % (60 * 60 * 1000)) / (60 * 1000))
+        const seconds = Math.floor((uptime % (60 * 1000)) / 1000)
+
         // Calculate average request processing time
         const activeInspects = Array.from(this.inspects.values())
         const processingTimes = activeInspects
@@ -115,6 +123,13 @@ export class InspectService implements OnModuleInit {
 
         return {
             status: this.initialBotsReady ? 'ready' : 'initializing',
+            uptime: {
+                days,
+                hours,
+                minutes,
+                seconds,
+                formatted: `${days}d ${hours}h ${minutes}m ${seconds}s`
+            },
             bots: {
                 ready: readyBots,
                 busy: busyBots,
