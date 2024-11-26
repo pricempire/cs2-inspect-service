@@ -178,7 +178,7 @@ export class Bot {
                 this.onHold = false
             }, this.onHoldTimeout)
 
-            throw new Error('Inspection timeout')
+            // throw new Error('Inspection timeout')
         }, this.inspectTimeout)
 
         this.cs2Instance.inspectItem(s !== '0' ? s : a, a, d)
