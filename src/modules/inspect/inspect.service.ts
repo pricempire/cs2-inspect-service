@@ -44,6 +44,8 @@ export class InspectService implements OnModuleInit {
     private readonly DEBOUNCE_DELAY = 3000; // 30 seconds debounce
     private lastInitializationTime = 0;
 
+    private readonly MAX_QUEUE_SIZE = 100 // Add max queue size constant
+
     constructor(
         private parseService: ParseService,
         private formatService: FormatService,
@@ -104,6 +106,10 @@ export class InspectService implements OnModuleInit {
      * @returns 
      */
     public async inspectItem(query: InspectDto) {
+        if (this.inspects.size >= this.MAX_QUEUE_SIZE) {
+            throw new HttpException('Queue is full, please try again later', HttpStatus.TOO_MANY_REQUESTS)
+        }
+
         this.currentRequests++
 
         const { s, a, d, m } = this.parseService.parse(query)
