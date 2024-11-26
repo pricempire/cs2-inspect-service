@@ -148,7 +148,7 @@ export class Asset {
     petIndex: number
 
     @Column({
-        type: 'smallint',
+        type: 'int8',
     })
     inventory: number
 
