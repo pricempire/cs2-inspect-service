@@ -460,9 +460,6 @@ export class InspectService implements OnModuleInit {
      * @returns 
      */
     private async saveAsset(response: any, inspectData: any, uniqueId: string) {
-
-        console.log(response)
-
         await this.assetRepository.upsert({
             uniqueId,
             ms: inspectData.ms,
