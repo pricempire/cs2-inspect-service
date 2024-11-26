@@ -30,11 +30,11 @@ export class InspectService implements OnModuleInit {
     private currentRequests = 0
     private requests: number[] = []
     private initializedBots = 0
-    private maxConcurrentBots = 120 // Initial bot count
-    private botsToAddWhenNeeded = 50 // Number of bots to add when needed
+    private maxConcurrentBots = 80 // Reduced from 120 to maintain ~60% utilization
+    private botsToAddWhenNeeded = 20 // Reduced from 50 to maintain better control
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
-    private readonly BOT_INIT_DELAY = 10; // 5 seconds delay between bot initializations
+    private readonly BOT_INIT_DELAY = 500; // 5 seconds delay between bot initializations
 
     private success = 0
     private cached = 0
@@ -49,6 +49,10 @@ export class InspectService implements OnModuleInit {
 
     // Add new property to track initial bots ready state
     private initialBotsReady = false;
+
+    private readonly TARGET_UTILIZATION = 0.6 // 60% target utilization
+    private readonly MIN_UTILIZATION = 0.5 // 50% minimum before scaling down
+    private readonly MAX_UTILIZATION = 0.7 // 70% maximum before scaling up
 
     constructor(
         private parseService: ParseService,
@@ -205,12 +209,12 @@ export class InspectService implements OnModuleInit {
                 }
 
                 // Add logging for debugging
-                this.logger.debug(`Starting inspection attempt ${retryCount + 1} for asset ${a} with bot ${bot.username}`);
+                // this.logger.debug(`Starting inspection attempt ${retryCount + 1} for asset ${a} with bot ${bot.username}`);
 
                 const timeoutId = setTimeout(async () => {
-                    this.logger.warn(`Timeout triggered for asset ${a} on attempt ${retryCount + 1}`);
+                    // this.logger.warn(`Timeout triggered for asset ${a} on attempt ${retryCount + 1}`);
                     if (retryCount < this.MAX_RETRIES) {
-                        this.logger.warn(`Inspection request timed out with bot ${bot.username}, attempting retry ${retryCount + 1} for asset ${a}`);
+                        // this.logger.warn(`Inspection request timed out with bot ${bot.username}, attempting retry ${retryCount + 1} for asset ${a}`);
                         clearTimeout(timeoutId);
                         this.inspects.delete(a);
                         await attemptInspection(retryCount + 1);
@@ -784,5 +788,62 @@ export class InspectService implements OnModuleInit {
     // Remove the static MAX_QUEUE_SIZE constant and add a getter
     private get MAX_QUEUE_SIZE(): number {
         return this.bots.size || this.maxConcurrentBots; // Fallback to initial bot count if no bots yet
+    }
+
+    @Cron('*/30 * * * * *') // Run every 30 seconds
+    private async adjustBotCount() {
+        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
+        const busyBots = Array.from(this.bots.values()).filter(bot => !bot.isReady()).length;
+        const totalBots = this.bots.size;
+
+        if (totalBots === 0) return;
+
+        const currentUtilization = busyBots / totalBots;
+
+        // Scale up if utilization is too high
+        if (currentUtilization > this.MAX_UTILIZATION) {
+            const additionalBotsNeeded = Math.min(
+                this.botsToAddWhenNeeded,
+                this.accounts.length - this.initializedBots
+            );
+            if (additionalBotsNeeded > 0) {
+                this.logger.debug(`High utilization (${(currentUtilization * 100).toFixed(1)}%), adding ${additionalBotsNeeded} bots`);
+                await this.initializeAdditionalBots();
+            }
+        }
+
+        // Scale down if utilization is too low
+        else if (currentUtilization < this.MIN_UTILIZATION && totalBots > this.maxConcurrentBots) {
+            const botsToRemove = Math.min(
+                Math.ceil(totalBots * 0.1), // Remove up to 10% of bots
+                totalBots - this.maxConcurrentBots
+            );
+            if (botsToRemove > 0) {
+                this.logger.debug(`Low utilization (${(currentUtilization * 100).toFixed(1)}%), removing ${botsToRemove} bots`);
+                await this.removeInactiveBots(botsToRemove);
+            }
+        }
+    }
+
+    private async removeInactiveBots(count: number) {
+        const now = Date.now();
+        const sortedBots = Array.from(this.botLastUsedTime.entries())
+            .sort(([, lastUsedA], [, lastUsedB]) => lastUsedA - lastUsedB)
+            .slice(0, count);
+
+        for (const [username] of sortedBots) {
+            const bot = this.bots.get(username);
+            if (bot && bot.isReady()) {
+                try {
+                    await bot.destroy();
+                    this.bots.delete(username);
+                    this.botLastUsedTime.delete(username);
+                    this.initializedBots--;
+                    this.logger.debug(`Removed underutilized bot ${username}`);
+                } catch (error) {
+                    this.logger.error(`Failed to remove bot ${username}: ${error.message}`);
+                }
+            }
+        }
     }
 }
