@@ -48,7 +48,7 @@ export class Bot {
 
         this.steamUser = new SteamUser({
             promptSteamGuardCode: false,
-            enablePicsCache: true,
+            enablePicsCache: false,
             httpProxy: proxyUrl.startsWith('http://') ? proxyUrl : null,
             socksProxy: proxyUrl.startsWith('socks5://') ? proxyUrl : null,
         })
