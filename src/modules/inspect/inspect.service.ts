@@ -65,6 +65,10 @@ export class InspectService implements OnModuleInit {
         this.logger.debug('Starting Inspect Module...')
         this.accounts = await this.loadAccounts()
 
+        if (this.maxConcurrentBots > this.accounts.length) {
+            this.maxConcurrentBots = this.accounts.length
+        }
+
         // Initialize minimum number of bots with delay
         for (let i = 0; i < this.maxConcurrentBots; i++) {
             if (this.accounts[i]) {
@@ -189,7 +193,6 @@ export class InspectService implements OnModuleInit {
 
         const resultPromise = new Promise((resolve, reject) => {
             const attemptInspection = async (retryCount = 0) => {
-                // Get a new bot for each attempt
                 const bot = await this.getAvailableBot()
                 if (!bot) {
                     // Check cache one more time before failing
@@ -201,7 +204,11 @@ export class InspectService implements OnModuleInit {
                     return reject(new HttpException('No bots are ready', HttpStatus.FAILED_DEPENDENCY))
                 }
 
+                // Add logging for debugging
+                this.logger.debug(`Starting inspection attempt ${retryCount + 1} for asset ${a} with bot ${bot.username}`);
+
                 const timeoutId = setTimeout(async () => {
+                    this.logger.warn(`Timeout triggered for asset ${a} on attempt ${retryCount + 1}`);
                     if (retryCount < this.MAX_RETRIES) {
                         this.logger.warn(`Inspection request timed out with bot ${bot.username}, attempting retry ${retryCount + 1} for asset ${a}`);
                         clearTimeout(timeoutId);
@@ -210,7 +217,7 @@ export class InspectService implements OnModuleInit {
                     } else {
                         this.inspects.delete(a);
                         this.failed++;
-                        reject(new HttpException('Inspection request timed out after retries', HttpStatus.REQUEST_TIMEOUT));
+                        reject(new HttpException('Inspection request timed out after retries', HttpStatus.GATEWAY_TIMEOUT));
                     }
                 }, this.QUEUE_TIMEOUT);
 
@@ -222,6 +229,7 @@ export class InspectService implements OnModuleInit {
                         resolve(value);
                     },
                     reject: (reason?: any) => {
+                        this.logger.warn(`Rejecting inspection for asset ${a}: ${reason}`);
                         clearTimeout(timeoutId);
                         reject(reason);
                     },
@@ -231,21 +239,22 @@ export class InspectService implements OnModuleInit {
                 });
 
                 try {
-                    await bot.inspectItem(s !== '0' ? s : m, a, d)
+                    await bot.inspectItem(s !== '0' ? s : m, a, d);
                 } catch (error) {
+                    this.logger.error(`Bot inspection failed for asset ${a}: ${error.message}`);
                     if (retryCount < this.MAX_RETRIES) {
                         this.logger.warn(`Bot inspection failed, attempting retry ${retryCount + 1} for asset ${a}`);
                         clearTimeout(timeoutId);
                         this.inspects.delete(a);
                         await attemptInspection(retryCount + 1);
                     } else {
-                        const inspect = this.inspects.get(a)
+                        const inspect = this.inspects.get(a);
                         if (inspect?.timeoutId) {
-                            clearTimeout(inspect.timeoutId)
+                            clearTimeout(inspect.timeoutId);
                         }
-                        this.failed++
-                        this.inspects.delete(a)
-                        reject(new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR))
+                        this.failed++;
+                        this.inspects.delete(a);
+                        reject(new HttpException(error.message, HttpStatus.GATEWAY_TIMEOUT));
                     }
                 }
             };

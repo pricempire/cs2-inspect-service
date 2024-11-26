@@ -20,7 +20,8 @@ export class InspectController {
             res.type('text/html').send(this.getApiDocumentation())
             return
         }
-        return await this.inspectService.inspectItem(query)
+        const data = await this.inspectService.inspectItem(query)
+        return res.send(data)
     }
 
     @Get('stats')
