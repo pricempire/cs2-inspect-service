@@ -9,15 +9,52 @@ import {
 } from 'typeorm'
 
 export enum HistoryType {
+    // Trading Events
     TRADE = 1,
-    MARKET_LISTING = 2,
-    MARKET_BUY = 3,
-    STICKER_APPLY = 4,
-    UNBOXED = 5,
-    UNKNOWN = 6,
-    MARKET_RELISTING = 7,
-    STICKER_REMOVE = 8,
-    STICKER_CHANGE = 9,
+    TRADE_BOT = 2,
+    TRADE_CANCELLED = 3,
+
+    // Market Events
+    MARKET_LISTING = 4,
+    MARKET_BUY = 5,
+    MARKET_RELISTING = 6,
+    MARKET_CANCELLED = 7,
+
+    // Sticker Events
+    STICKER_APPLY = 8,
+    STICKER_REMOVE = 9,
+    STICKER_CHANGE = 10,
+    STICKER_SCRAPE = 11,
+
+    // Item Source Events
+    UNBOXED = 12,
+    CRAFTED = 13,
+    TRADED_UP = 14,
+    PURCHASED_INGAME = 15,
+    DROPPED = 16,
+
+    // Name Tag Events
+    NAMETAG_ADDED = 17,
+    NAMETAG_REMOVED = 18,
+
+    // Keychain Events
+    KEYCHAIN_ADDED = 19,
+    KEYCHAIN_REMOVED = 20,
+    KEYCHAIN_CHANGED = 21,
+
+    // Special Events
+    STORAGE_UNIT_STORED = 22,
+    STORAGE_UNIT_RETRIEVED = 23,
+    GIFT_RECEIVED = 24,
+    GIFT_SENT = 25,
+
+    // Contract Events
+    CONTRACT_LISTED = 26,
+    CONTRACT_COMPLETED = 27,
+    CONTRACT_CANCELLED = 28,
+
+    // Other
+    UNKNOWN = 99
 }
 
 

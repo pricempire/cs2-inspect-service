@@ -554,35 +554,99 @@ export class InspectService implements OnModuleInit {
      */
     private getHistoryType(response: any, history: any, inspectData: any): HistoryType {
         if (!history) {
+            // Check for new item sources
+            if (response.origin === 8) return HistoryType.TRADED_UP
+            if (response.origin === 4) return HistoryType.DROPPED
+            if (response.origin === 1) return HistoryType.PURCHASED_INGAME
+            if (response.origin === 2) return HistoryType.UNBOXED
+            if (response.origin === 3) return HistoryType.CRAFTED
             return HistoryType.UNKNOWN
         }
 
-        if (history.owner === inspectData.ms) {
-            // Check sticker changes
-            for (const slot of [0, 1, 2, 3, 4]) {
-                const sticker = response.stickers.find(s => s.slot === slot)
-                const stickerOld = history.stickers.find(s => s.slot === slot)
-
-                if (!sticker && stickerOld) return HistoryType.STICKER_REMOVE
-                if (sticker && !stickerOld) return HistoryType.STICKER_APPLY
-                if (sticker?.stickerId !== stickerOld?.stickerId) return HistoryType.STICKER_CHANGE
-            }
-        }
-
-        if (history.owner !== inspectData.ms) {
-            if (history.owner.startsWith('7656')) {
+        // Check ownership changes
+        if (history?.owner !== inspectData?.ms) {
+            // Trading events
+            if (history?.owner?.startsWith('7656')) {
                 return HistoryType.TRADE
             }
-            return HistoryType.MARKET_BUY
+
+            // Market events
+            if (history?.owner && !history?.owner?.startsWith('7656')) {
+                return HistoryType.MARKET_BUY
+            }
         }
 
-        if (!history.owner.startsWith('7656') && inspectData.ms.startsWith('7656')) {
+        // Market listing events
+        if (history?.owner && history.owner.startsWith('7656') && !inspectData?.ms?.startsWith('7656')) {
             return HistoryType.MARKET_LISTING
+        }
+
+        // Sticker changes
+        if (history.owner === inspectData.ms) {
+            const stickerChanges = this.detectStickerChanges(response.stickers, history.stickers)
+            if (stickerChanges) return stickerChanges
+        }
+
+        // Nametag changes
+        if (response.customname !== history.customName) {
+            return response.customname ? HistoryType.NAMETAG_ADDED : HistoryType.NAMETAG_REMOVED
+        }
+
+        // Keychain changes
+        if (history.owner === inspectData.ms) {
+            const keychainChanges = this.detectKeychainChanges(response.keychains, history.keychains)
+            if (keychainChanges) return keychainChanges
+        }
+
+        // Storage unit detection
+        if (this.isStorageUnitOperation(response, history)) {
+            return response.inventory ? HistoryType.STORAGE_UNIT_RETRIEVED : HistoryType.STORAGE_UNIT_STORED
         }
 
         return HistoryType.UNKNOWN
     }
 
+    // Helper methods
+    private detectStickerChanges(currentStickers: any[], previousStickers: any[]): HistoryType | null {
+        if (!currentStickers || !previousStickers) return null
+
+        for (const slot of [0, 1, 2, 3, 4]) {
+            const current = currentStickers.find(s => s.slot === slot)
+            const previous = previousStickers.find(s => s.slot === slot)
+
+            if (!current && previous) return HistoryType.STICKER_REMOVE
+            if (current && !previous) return HistoryType.STICKER_APPLY
+            if (current && previous && current.stickerId !== previous.stickerId) {
+                // Check if it's a scrape by comparing wear values
+                if (current.stickerId === previous.stickerId && current.wear > previous.wear) {
+                    return HistoryType.STICKER_SCRAPE
+                }
+                return HistoryType.STICKER_CHANGE
+            }
+        }
+        return null
+    }
+
+    private detectKeychainChanges(currentKeychains: any[], previousKeychains: any[]): HistoryType | null {
+        if (!currentKeychains || !previousKeychains) return null
+
+        if (currentKeychains.length === 0 && previousKeychains.length > 0) {
+            return HistoryType.KEYCHAIN_REMOVED
+        }
+        if (currentKeychains.length > 0 && previousKeychains.length === 0) {
+            return HistoryType.KEYCHAIN_ADDED
+        }
+        if (JSON.stringify(currentKeychains) !== JSON.stringify(previousKeychains)) {
+            return HistoryType.KEYCHAIN_CHANGED
+        }
+        return null
+    }
+
+    private isStorageUnitOperation(response: any, history: any): boolean {
+        // Implement your storage unit detection logic here
+        // Could be based on inventory status or other indicators
+        return false
+    }
     /**
      * Generate a unique ID for an asset
      * @param item 
