@@ -51,7 +51,7 @@ export interface FormattedResponse {
         rarity: number;
         quality: number;
         origin: number;
-        paintwear?: number;
+        floatvalue?: number;
         paintseed?: number;
         wear_name?: string;
         market_hash_name: string;

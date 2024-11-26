@@ -201,7 +201,7 @@ export class FormatService implements OnModuleInit {
                 rarity: asset.rarity,
                 quality: asset.quality,
                 origin: asset.origin,
-                paintwear: asset.paintWear,
+                floatvalue: asset.paintWear,
                 paintseed: meta.paintSeed,
                 wear_name: meta.wear,
                 market_hash_name: this.buildMarketHashName(weapon, paint, meta),
