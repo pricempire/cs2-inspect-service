@@ -197,7 +197,6 @@ export class Bot {
                 accountName: this.username,
                 password: this.password,
                 rememberPassword: true,
-                logonID: Math.floor(Math.random() * 100000), // Add unique logon ID
             }
 
             this.logger.debug(`${this.username}: Attempting Steam login`)
