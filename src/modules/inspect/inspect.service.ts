@@ -39,8 +39,7 @@ export class InspectService implements OnModuleInit {
     private cached = 0
     private failed = 0
 
-    // Add new class property to track sessions
-    private currentSession = 0
+    // Add new class property to track sessions 
     private readonly ACCOUNTS_PER_SESSION = 5
 
     constructor(
