@@ -39,6 +39,10 @@ export class InspectService implements OnModuleInit {
     private cached = 0
     private failed = 0
 
+    // Add new class property to track sessions
+    private currentSession = 0
+    private readonly ACCOUNTS_PER_SESSION = 5
+
     constructor(
         private parseService: ParseService,
         private formatService: FormatService,
@@ -208,18 +212,22 @@ export class InspectService implements OnModuleInit {
      */
     private async initializeBot(username: string, password: string) {
         try {
+            // Calculate which session this bot should use
+            const sessionNumber = Math.floor(this.initializedBots / this.ACCOUNTS_PER_SESSION)
+            const proxyUrl = process.env.PROXY_URL?.replace('[session]', sessionNumber.toString())
+
             const bot = new Bot(
                 username,
                 password,
-                process.env.PROXY_URL,
+                proxyUrl,
                 (response) => this.handleInspectResult(username, response)
             )
 
             await bot.initialize()
             this.bots.set(username, bot)
-            this.botLastUsedTime.set(username, Date.now()) // Track initial usage time
+            this.botLastUsedTime.set(username, Date.now())
             this.initializedBots++
-            this.logger.debug(`Bot ${username} initialized successfully`)
+            this.logger.debug(`Bot ${username} initialized successfully with session ${sessionNumber}`)
         } catch (error) {
             this.logger.error(`Failed to initialize bot ${username}: ${error.message}`)
         }

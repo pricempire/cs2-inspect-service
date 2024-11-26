@@ -37,7 +37,6 @@ export class Bot {
 
     private createSteamUser() {
         this.logger.debug(`Creating Steam User for ${this.username}`)
-        const proxy = this.proxyUrl.replace('[session]', this.username)
 
         if (this.steamUser) {
             this.logger.error(`Bot for ${this.username} already exists`)
@@ -47,8 +46,8 @@ export class Bot {
         this.steamUser = new SteamUser({
             promptSteamGuardCode: false,
             enablePicsCache: true,
-            httpProxy: proxy.startsWith('http://') ? proxy : null,
-            socksProxy: proxy.startsWith('socks5://') ? proxy : null,
+            httpProxy: this.proxyUrl.startsWith('http://') ? this.proxyUrl : null,
+            socksProxy: this.proxyUrl.startsWith('socks5://') ? this.proxyUrl : null,
         })
 
         this.setupSteamUserEvents()
@@ -74,6 +73,8 @@ export class Bot {
             ) {
                 this.initialize() // Reinitialize on these errors
             }
+
+            this.logger.error(`${this.username}: ${err.toString()}`)
         })
 
         this.steamUser.on('disconnected', (eresult, msg) => {
