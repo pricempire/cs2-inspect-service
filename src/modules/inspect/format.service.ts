@@ -222,6 +222,8 @@ export class FormatService implements OnModuleInit {
                 total_count: meta.totalCount,
                 souvenir: meta.quality === 12,
                 stattrak: meta.quality === 9,
+                min: paint?.min,
+                max: paint?.max,
             },
         }
     }

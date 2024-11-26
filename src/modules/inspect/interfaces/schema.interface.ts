@@ -63,5 +63,7 @@ export interface FormattedResponse {
         total_count?: number;
         stickers?: StickerKeychain[];
         keychains?: StickerKeychain[];
+        min?: number;
+        max?: number;
     };
 } 
