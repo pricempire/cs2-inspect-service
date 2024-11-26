@@ -261,28 +261,27 @@ export class InspectService implements OnModuleInit {
      * @returns 
      */
     private async getAvailableBot(): Promise<Bot | null> {
+        // First check for any ready bots
         const readyBots = Array.from(this.bots.entries())
             .filter(([_, bot]) => bot.isReady())
 
-        if (readyBots.length === 0) {
-            // If no bots are ready and we haven't initialized all accounts
-            if (this.initializedBots < this.accounts.length) {
-                const newBots = await this.initializeAdditionalBots()
-                if (newBots.length > 0) {
-                    return newBots[0] // Return the first new bot
-                }
-            }
-            return null
+        if (readyBots.length > 0) {
+            // Use existing ready bot with round-robin selection
+            const [username, bot] = readyBots[this.nextBot % readyBots.length]
+            this.nextBot = (this.nextBot + 1) % readyBots.length
+            this.botLastUsedTime.set(username, Date.now())
+            return bot
         }
 
-        // Round-robin selection
-        const [username, bot] = readyBots[this.nextBot % readyBots.length]
-        this.nextBot = (this.nextBot + 1) % readyBots.length
+        // Only initialize new bots if we have no ready bots and haven't reached account limit
+        if (this.bots.size < this.accounts.length) {
+            const newBots = await this.initializeAdditionalBots()
+            if (newBots.length > 0) {
+                return newBots[0]
+            }
+        }
 
-        // Update last used time
-        this.botLastUsedTime.set(username, Date.now())
-
-        return bot
+        return null
     }
 
     /**
