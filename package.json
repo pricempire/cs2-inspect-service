@@ -32,6 +32,7 @@
     "@nestjs/cli": "^10.4.8",
     "@nestjs/config": "^3.3.0",
     "@nestjs/microservices": "^10.4.8",
+    "@nestjs/platform-fastify": "^10.4.9",
     "@nestjs/schedule": "^4.1.1",
     "@nestjs/schematics": "^10.2.3",
     "@nestjs/testing": "^10.4.8",

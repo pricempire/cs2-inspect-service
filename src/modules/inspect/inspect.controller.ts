@@ -2,11 +2,14 @@ import { Controller, Get, Query } from '@nestjs/common'
 import { InspectService } from './inspect.service'
 import { InspectDto } from './inspect.dto'
 
-@Controller('/')
+@Controller()
 export class InspectController {
     constructor(private readonly inspectService: InspectService) { }
 
-    @Get(['', 'inspect', 'inspect/'])
+    @Get([
+        '',
+        'inspect',
+    ])
     async inspect(
         @Query() query: InspectDto,
     ) {
