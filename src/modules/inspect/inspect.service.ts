@@ -25,7 +25,7 @@ export class InspectService implements OnModuleInit {
     private readonly logger = new Logger(InspectService.name)
     private bots: Map<string, Bot> = new Map()
     private accounts: string[] = []
-    private inspects: Map<string, { ms: string; d: string; resolve: (value: any) => void; reject: (reason?: any) => void }> = new Map()
+    private inspects: Map<string, { ms: string; d: string; resolve: (value: any) => void; reject: (reason?: any) => void; timeoutId: NodeJS.Timeout; startTime?: number }> = new Map()
     private nextBot = 0
     private currentRequests = 0
     private requests: number[] = []
@@ -45,6 +45,7 @@ export class InspectService implements OnModuleInit {
     private lastInitializationTime = 0;
 
     private readonly MAX_QUEUE_SIZE = 100 // Add max queue size constant
+    private readonly QUEUE_TIMEOUT = 30000; // 30 seconds timeout
 
     constructor(
         private parseService: ParseService,
@@ -143,13 +144,27 @@ export class InspectService implements OnModuleInit {
             throw new HttpException('No bots are ready', HttpStatus.FAILED_DEPENDENCY)
         }
 
-        // Store inspect details with promise handlers
+        // Store inspect details with promise handlers and timeout
         const resultPromise = new Promise((resolve, reject) => {
+            // Set timeout to automatically remove from queue
+            const timeoutId = setTimeout(() => {
+                this.inspects.delete(a)
+                this.failed++
+                reject(new HttpException('Inspection request timed out', HttpStatus.REQUEST_TIMEOUT))
+            }, this.QUEUE_TIMEOUT)
+
             this.inspects.set(a, {
                 ms: m !== '0' ? m : s,
                 d,
-                resolve,
-                reject,
+                resolve: (value: any) => {
+                    clearTimeout(timeoutId)
+                    resolve(value)
+                },
+                reject: (reason?: any) => {
+                    clearTimeout(timeoutId)
+                    reject(reason)
+                },
+                timeoutId, // Store timeoutId to clear it if needed
             })
         })
 
@@ -158,8 +173,12 @@ export class InspectService implements OnModuleInit {
             await bot.inspectItem(s !== '0' ? s : m, a, d)
             return resultPromise
         } catch (error) {
+            const inspect = this.inspects.get(a)
+            if (inspect?.timeoutId) {
+                clearTimeout(inspect.timeoutId)
+            }
             this.failed++
-            this.inspects.delete(a) // Remove from queue on error
+            this.inspects.delete(a)
             throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR)
         }
     }
@@ -425,7 +444,10 @@ export class InspectService implements OnModuleInit {
             this.failed++
             inspectData.reject(new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR))
         } finally {
-            this.inspects.delete(response.itemid) // Always remove from queue when done
+            if (inspectData.timeoutId) {
+                clearTimeout(inspectData.timeoutId)
+            }
+            this.inspects.delete(response.itemid)
         }
     }
 
@@ -590,5 +612,23 @@ export class InspectService implements OnModuleInit {
         ];
         const stringToHash = values.join('-');
         return createHash('sha1').update(stringToHash).digest('hex').substring(0, 8);
+    }
+
+    // Add a cleanup method to run periodically
+    @Cron('*/30 * * * * *') // Run every 30 seconds
+    private async cleanupStaleRequests() {
+        const now = Date.now()
+        const staleTimeout = this.QUEUE_TIMEOUT * 2 // Double the timeout for extra safety
+
+        for (const [assetId, inspect] of this.inspects.entries()) {
+            if (now - inspect.startTime > staleTimeout) {
+                if (inspect.timeoutId) {
+                    clearTimeout(inspect.timeoutId)
+                }
+                this.inspects.delete(assetId)
+                this.failed++
+                this.logger.warn(`Cleaned up stale request for asset ${assetId}`)
+            }
+        }
     }
 }
