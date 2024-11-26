@@ -34,7 +34,7 @@ export class InspectService implements OnModuleInit {
     private botsToAddWhenNeeded = 3 // Number of bots to add when needed
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
-    private readonly BOT_INIT_DELAY = 200; // 5 seconds delay between bot initializations
+    private readonly BOT_INIT_DELAY = 10; // 5 seconds delay between bot initializations
 
     private success = 0
     private cached = 0
