@@ -14,6 +14,8 @@ export class Bot {
     private readonly onHoldTimeout = 60000 // 60 seconds
     private client: any // Replace 'any' with your actual Steam client type
     private interval: NodeJS.Timeout | null = null
+    private readonly connectionTimeout = 30000; // 30 seconds
+    private connectionTimer: NodeJS.Timeout | null = null;
 
     private readonly loginErrors = {
         61: 'Invalid Password',
@@ -30,9 +32,34 @@ export class Bot {
     ) { }
 
     async initialize() {
-        this.createSteamUser()
-        this.createCS2Instance()
-        await this.login()
+        this.logger.log(`Starting initialization for bot ${this.username}`)
+
+        // Clear any existing connection timer
+        if (this.connectionTimer) {
+            clearTimeout(this.connectionTimer);
+        }
+
+        // Set connection timeout
+        this.connectionTimer = setTimeout(() => {
+            if (!this.ready) {
+                this.logger.error(`${this.username}: Connection timeout after ${this.connectionTimeout}ms`);
+                this.disconnect();
+                this.initialize(); // Retry connection
+            }
+        }, this.connectionTimeout);
+
+        try {
+            await this.createSteamUser()
+            await this.createCS2Instance()
+            await this.login()
+            this.logger.log(`Initialization started for bot ${this.username}`)
+        } catch (error) {
+            this.logger.error(`Initialization failed for bot ${this.username}`, {
+                error: error.message,
+                stack: error.stack
+            })
+            throw error
+        }
     }
 
     private createSteamUser() {
@@ -60,85 +87,122 @@ export class Bot {
     }
 
     private setupSteamUserEvents() {
+        this.logger.debug(`${this.username}: Setting up Steam user events`)
+
         this.steamUser.on('error', (err) => {
+            this.logger.error(`${this.username}: Steam error occurred`, {
+                error: err.toString(),
+                eresult: err.eresult,
+                stack: err.stack,
+                timestamp: new Date().toISOString()
+            })
+
             if (err.eresult && this.loginErrors[err.eresult]) {
-                this.logger.error(`${this.username}: ${this.loginErrors[err.eresult]}`)
-            }
-            if (
-                err.toString().includes('Proxy connection timed out') ||
-                err.toString().includes('RateLimit') ||
-                err.toString().includes('Bad Gateway') ||
-                err.toString().includes('AccountLoginDeniedThrottle') ||
-                err.toString().includes('NetworkUnreachable')
-            ) {
-                this.initialize() // Reinitialize on these errors
+                this.logger.error(`${this.username}: Steam login error: ${this.loginErrors[err.eresult]}`)
             }
 
-            this.logger.error(`${this.username}: ${err.toString()}`)
-            console.log(err)
+            if (err.toString().includes('Proxy connection') ||
+                err.toString().includes('RateLimit') ||
+                err.toString().includes('Connection timed out')) {
+                this.logger.error(`${this.username}: Connection error detected, attempting reconnect`)
+                this.initialize()
+            }
         })
 
         this.steamUser.on('disconnected', (eresult, msg) => {
-            this.logger.debug(`${this.username}: Logged off, reconnecting! (${eresult}, ${msg})`)
+            this.logger.warn(`${this.username}: Steam disconnected`, {
+                eresult,
+                message: msg,
+                wasReady: this.ready,
+                timestamp: new Date().toISOString()
+            })
             this.ready = false
             this.initialize()
         })
 
         this.steamUser.on('loggedOn', () => {
-            this.logger.debug(`${this.username}: Log on OK`)
+            this.logger.log(`${this.username}: Successfully logged into Steam`, {
+                steamId: this.steamUser.steamID?.getSteamID64(),
+                timestamp: new Date().toISOString()
+            })
+
+            this.logger.debug(`${this.username}: Stopping all games`)
             this.steamUser.gamesPlayed([], true)
 
             this.steamUser.once('ownershipCached', () => {
-                if (!this.steamUser.ownsApp(730)) {
-                    this.logger.debug(`${this.username} doesn't own CS:GO, retrieving free license`)
+                const ownsCS2 = this.steamUser.ownsApp(730)
+                this.logger.debug(`${this.username}: Ownership cached, owns CS2: ${ownsCS2}`)
+
+                if (!ownsCS2) {
+                    this.logger.debug(`${this.username}: Requesting CS2 free license`)
                     this.requestCS2License()
                 } else {
-                    this.logger.debug(`${this.username}: Initiating GC Connection`)
+                    this.logger.debug(`${this.username}: Launching CS2`)
                     this.steamUser.gamesPlayed([730], true)
                 }
             })
         })
+
+        this.steamUser.on('steamGuard', (domain, callback) => {
+            this.logger.warn(`${this.username}: Steam Guard requested`, { domain })
+        })
     }
 
     private setupCS2Events() {
-        this.cs2Instance.on('inspectItemInfo', async (response) => {
-            this.busy = false
-            if (this.ttl) {
-                clearTimeout(this.ttl)
-                this.ttl = null
-            }
-            await this.onInspectResult(response)
-        })
+        this.logger.debug(`${this.username}: Setting up CS2 events`)
 
         this.cs2Instance.on('connectedToGC', () => {
             this.ready = true
-            this.logger.debug(`${this.username}: CS2 Client Ready!`)
+            this.logger.log(`${this.username}: Connected to CS2 Game Coordinator`, {
+                timestamp: new Date().toISOString(),
+                haveGCSession: this.cs2Instance.haveGCSession
+            })
         })
 
         this.cs2Instance.on('disconnectedFromGC', (reason) => {
             this.ready = false
-            this.logger.debug(`${this.username}: CS2 unready (${reason}), trying to reconnect!`)
+            this.logger.warn(`${this.username}: Disconnected from CS2 GC`, {
+                reason,
+                timestamp: new Date().toISOString(),
+                wasReady: this.ready
+            })
             this.initialize()
         })
 
         this.cs2Instance.on('connectionStatus', (status) => {
-            this.logger.debug(`${this.username}: GC Connection Status Update ${status}`)
-        })
-
-        this.cs2Instance.on('debug', (msg) => {
-            this.logger.debug(`${this.username}: ${msg}`)
+            this.logger.debug(`${this.username}: CS2 GC connection status`, {
+                status,
+                ready: this.ready,
+                busy: this.busy,
+                haveGCSession: this.cs2Instance.haveGCSession
+            })
         })
     }
 
     private async login() {
-        this.logger.debug(`Logging in ${this.username}`)
-        this.ready = false
-
-        this.steamUser.logOn({
-            accountName: this.username,
-            password: this.password,
-            rememberPassword: true,
+        this.logger.debug(`${this.username}: Starting login process`, {
+            hasProxy: !!this.proxyUrl,
+            proxyType: this.proxyUrl?.startsWith('socks5://') ? 'SOCKS5' : 'HTTP'
         })
+
+        try {
+            const loginDetails = {
+                accountName: this.username,
+                password: this.password,
+                rememberPassword: true,
+                logonID: Math.floor(Math.random() * 100000), // Add unique logon ID
+            }
+
+            this.logger.debug(`${this.username}: Attempting Steam login`)
+            this.steamUser.logOn(loginDetails)
+        } catch (error) {
+            this.logger.error(`${this.username}: Login attempt failed`, {
+                error: error.message,
+                stack: error.stack,
+                timestamp: new Date().toISOString()
+            })
+            throw error
+        }
     }
 
     private requestCS2License() {
