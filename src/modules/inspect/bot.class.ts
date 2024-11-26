@@ -77,6 +77,9 @@ export class Bot {
                 this.initialize() // Reinitialize on these errors
             }
 
+            if (err.toString().includes('Account Disabled')) {
+            }
+
             console.log(err)
         })
 

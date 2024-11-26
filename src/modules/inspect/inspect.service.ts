@@ -30,8 +30,8 @@ export class InspectService implements OnModuleInit {
     private currentRequests = 0
     private requests: number[] = []
     private initializedBots = 0
-    private maxConcurrentBots = 50 // Initial bot count
-    private botsToAddWhenNeeded = 3 // Number of bots to add when needed
+    private maxConcurrentBots = 100 // Initial bot count
+    private botsToAddWhenNeeded = 30 // Number of bots to add when needed
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
     private readonly BOT_INIT_DELAY = 10; // 5 seconds delay between bot initializations
@@ -41,7 +41,7 @@ export class InspectService implements OnModuleInit {
     private failed = 0
 
     private initializationInProgress = false;
-    private readonly DEBOUNCE_DELAY = 3000; // 30 seconds debounce
+    private readonly DEBOUNCE_DELAY = 10000; // 10 seconds debounce
     private lastInitializationTime = 0;
 
     private readonly QUEUE_TIMEOUT = 30000; // 30 seconds timeout
