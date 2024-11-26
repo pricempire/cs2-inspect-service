@@ -130,6 +130,19 @@ export class InspectService implements OnModuleInit {
             throw new HttpException('Refresh is not allowed', HttpStatus.FORBIDDEN)
         }
 
+        // Get available bot first to fail fast if none available
+        const bot = await this.getAvailableBot()
+        if (!bot) {
+            // Check cache one more time before failing
+            const cachedAsset = await this.checkCache(a, d)
+            if (cachedAsset) {
+                this.cached++
+                return cachedAsset
+            }
+
+            throw new HttpException('No bots are ready', HttpStatus.FAILED_DEPENDENCY)
+        }
+
         // Store inspect details with promise handlers
         const resultPromise = new Promise((resolve, reject) => {
             this.inspects.set(a, {
@@ -140,27 +153,13 @@ export class InspectService implements OnModuleInit {
             })
         })
 
-        // Get available bot
-        const bot = await this.getAvailableBot()
-        if (!bot) {
-            // Check cache one more time before failing
-            const cachedAsset = await this.checkCache(a, d)
-            if (cachedAsset) {
-                this.cached++
-                this.inspects.delete(a)
-                return cachedAsset
-            }
-
-            throw new HttpException('No bots are ready', HttpStatus.FAILED_DEPENDENCY)
-        }
-
         // Trigger inspection
         try {
             await bot.inspectItem(s !== '0' ? s : m, a, d)
             return resultPromise
         } catch (error) {
             this.failed++
-            this.inspects.delete(a)
+            this.inspects.delete(a) // Remove from queue on error
             throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR)
         }
     }
@@ -426,7 +425,7 @@ export class InspectService implements OnModuleInit {
             this.failed++
             inspectData.reject(new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR))
         } finally {
-            this.inspects.delete(response.itemid)
+            this.inspects.delete(response.itemid) // Always remove from queue when done
         }
     }
 
