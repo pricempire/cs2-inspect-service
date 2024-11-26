@@ -9,6 +9,7 @@ export class InspectController {
     @Get([
         '',
         'inspect',
+        'float',
     ])
     async inspect(
         @Query() query: InspectDto,
