@@ -241,20 +241,27 @@ export class Bot {
 
         this.busy = true
 
-        // Set timeout for inspection
-        this.ttl = setTimeout(() => {
-            this.logger.error(`${this.username} TTL exceeded for ${a}`)
-            this.busy = false
-            this.onHold = true
+        return new Promise((resolve, reject) => {
+            // Set timeout for inspection
+            this.ttl = setTimeout(() => {
+                this.logger.error(`${this.username} TTL exceeded for ${a}`)
+                this.busy = false
+                this.onHold = true
 
-            setTimeout(() => {
-                this.onHold = false
-            }, this.onHoldTimeout)
+                setTimeout(() => {
+                    this.onHold = false
+                }, this.onHoldTimeout)
 
-            throw new Error('Inspection timeout')
-        }, this.inspectTimeout)
+                reject(new Error('Inspection timeout'))
+            }, this.inspectTimeout)
 
-        this.cs2Instance.inspectItem(s !== '0' ? s : a, a, d)
+            try {
+                this.cs2Instance.inspectItem(s !== '0' ? s : a, a, d)
+                resolve()
+            } catch (error) {
+                reject(error)
+            }
+        })
     }
 
     public disconnect() {
