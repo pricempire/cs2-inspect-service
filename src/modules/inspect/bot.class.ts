@@ -77,6 +77,13 @@ export class Bot {
             socksProxy: this.proxyUrl.startsWith('socks5://') ? this.proxyUrl : null,
         })
 
+        console.log({
+            promptSteamGuardCode: false,
+            enablePicsCache: true,
+            httpProxy: this.proxyUrl.startsWith('http://') ? this.proxyUrl : null,
+            socksProxy: this.proxyUrl.startsWith('socks5://') ? this.proxyUrl : null,
+        })
+
         this.setupSteamUserEvents()
     }
 
