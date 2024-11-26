@@ -34,14 +34,14 @@ export class InspectService implements OnModuleInit {
     private botsToAddWhenNeeded = 3 // Number of bots to add when needed
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
-    private readonly BOT_INIT_DELAY = 5000; // 5 seconds delay between bot initializations
+    private readonly BOT_INIT_DELAY = 200; // 5 seconds delay between bot initializations
 
     private success = 0
     private cached = 0
     private failed = 0
 
     private initializationInProgress = false;
-    private readonly DEBOUNCE_DELAY = 30000; // 30 seconds debounce
+    private readonly DEBOUNCE_DELAY = 3000; // 30 seconds debounce
     private lastInitializationTime = 0;
 
     constructor(
@@ -249,7 +249,7 @@ export class InspectService implements OnModuleInit {
         // Check debounce time
         const now = Date.now();
         if (now - this.lastInitializationTime < this.DEBOUNCE_DELAY) {
-            this.logger.debug('Initialization requested too soon, skipping...');
+            // this.logger.debug('Initialization requested too soon, skipping...');
             return [];
         }
 
