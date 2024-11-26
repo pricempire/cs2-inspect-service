@@ -76,9 +76,9 @@ export class InspectService implements OnModuleInit {
         }
 
         // Set initial bots as ready if we have enough ready bots
-        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
 
         let iv = setInterval(() => {
+            const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
             this.initialBotsReady = readyBots >= this.maxConcurrentBots * 0.6; // 60% of bots should be ready
             if (this.initialBotsReady) {
                 clearInterval(iv)
