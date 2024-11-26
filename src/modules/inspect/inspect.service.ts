@@ -30,8 +30,8 @@ export class InspectService implements OnModuleInit {
     private currentRequests = 0
     private requests: number[] = []
     private initializedBots = 0
-    private maxConcurrentBots = 100 // Initial bot count
-    private botsToAddWhenNeeded = 30 // Number of bots to add when needed
+    private maxConcurrentBots = 200 // Initial bot count
+    private botsToAddWhenNeeded = 50 // Number of bots to add when needed
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
     private readonly BOT_INIT_DELAY = 10; // 5 seconds delay between bot initializations
@@ -46,6 +46,9 @@ export class InspectService implements OnModuleInit {
 
     private readonly QUEUE_TIMEOUT = 30000; // 30 seconds timeout
     private readonly MAX_RETRIES = 2; // Add max retries constant
+
+    // Add new property to track initial bots ready state
+    private initialBotsReady = false;
 
     constructor(
         private parseService: ParseService,
@@ -71,6 +74,10 @@ export class InspectService implements OnModuleInit {
                 await new Promise(resolve => setTimeout(resolve, this.BOT_INIT_DELAY))
             }
         }
+
+        // Set initial bots as ready if we have enough ready bots
+        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
+        this.initialBotsReady = readyBots >= this.maxConcurrentBots * 0.8; // 80% of bots should be ready
     }
 
     /**
@@ -107,6 +114,14 @@ export class InspectService implements OnModuleInit {
      * @returns 
      */
     public async inspectItem(query: InspectDto) {
+        // Add check for initial bots ready state
+        if (!this.initialBotsReady) {
+            throw new HttpException(
+                'Service is still initializing, please try again later',
+                HttpStatus.SERVICE_UNAVAILABLE
+            )
+        }
+
         if (this.inspects.size >= this.MAX_QUEUE_SIZE) {
             throw new HttpException(
                 `Queue is full (${this.inspects.size}/${this.MAX_QUEUE_SIZE}), please try again later`,
@@ -242,6 +257,9 @@ export class InspectService implements OnModuleInit {
             if (accounts.length === 0) {
                 throw new Error('No valid accounts found in accounts file')
             }
+
+            // Randomize the accounts array
+            accounts = accounts.sort(() => Math.random() - 0.5)
 
             this.logger.debug(`Loaded ${accounts.length} accounts`)
             return accounts
