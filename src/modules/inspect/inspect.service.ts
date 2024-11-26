@@ -30,7 +30,7 @@ export class InspectService implements OnModuleInit {
     private currentRequests = 0
     private requests: number[] = []
     private initializedBots = 0
-    private maxConcurrentBots = 3 // Initial bot count
+    private maxConcurrentBots = 50 // Initial bot count
     private botsToAddWhenNeeded = 3 // Number of bots to add when needed
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds

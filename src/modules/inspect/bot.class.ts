@@ -76,6 +76,8 @@ export class Bot {
             ) {
                 this.initialize() // Reinitialize on these errors
             }
+
+            console.log(err)
         })
 
         this.steamUser.on('disconnected', (eresult, msg) => {
