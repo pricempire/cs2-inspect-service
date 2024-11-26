@@ -75,6 +75,7 @@ export class Bot {
             }
 
             this.logger.error(`${this.username}: ${err.toString()}`)
+            console.log(err)
         })
 
         this.steamUser.on('disconnected', (eresult, msg) => {
