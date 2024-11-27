@@ -368,16 +368,12 @@ export class InspectService implements OnModuleInit {
      * @returns 
      */
     private async initializeAdditionalBots() {
-        // Check if initialization is already in progress
         if (this.initializationInProgress) {
-            // this.logger.debug('Bot initialization already in progress, skipping...');
             return [];
         }
 
-        // Check debounce time
         const now = Date.now();
         if (now - this.lastInitializationTime < this.DEBOUNCE_DELAY) {
-            // this.logger.debug('Initialization requested too soon, skipping...');
             return [];
         }
 
@@ -385,10 +381,18 @@ export class InspectService implements OnModuleInit {
             this.initializationInProgress = true;
             this.lastInitializationTime = now;
 
+            // Verify current counts
+            await this.resetInitializationCounter()
+
             const botsToAdd = Math.min(
                 this.botsToAddWhenNeeded,
-                this.accounts.length - this.initializedBots
+                this.accounts.length - this.initializedBots,
+                this.maxConcurrentBots - this.bots.size // Add this check
             )
+
+            if (botsToAdd <= 0) {
+                return [];
+            }
 
             this.logger.debug(`Initializing ${botsToAdd} additional bots...`);
 
@@ -458,6 +462,7 @@ export class InspectService implements OnModuleInit {
     private async cleanupInactiveBots() {
         const now = Date.now()
         const botsToRemove: string[] = []
+        let removedCount = 0
 
         // Find inactive bots
         this.botLastUsedTime.forEach((lastUsed, username) => {
@@ -471,14 +476,25 @@ export class InspectService implements OnModuleInit {
             const bot = this.bots.get(username)
             if (bot) {
                 try {
-                    await bot.destroy() // Assuming there's a destroy method in Bot class
+                    await bot.destroy()
                     this.bots.delete(username)
                     this.botLastUsedTime.delete(username)
-                    this.initializedBots--
+                    removedCount++
                     this.logger.debug(`Removed inactive bot ${username}`)
                 } catch (error) {
                     this.logger.error(`Failed to remove bot ${username}: ${error.message}`)
                 }
+            }
+        }
+
+        // Update initialization counter
+        if (removedCount > 0) {
+            this.initializedBots = Math.max(0, this.initializedBots - removedCount)
+            this.logger.debug(`Removed ${removedCount} bots, new initialized count: ${this.initializedBots}`)
+
+            // Trigger initialization of new bots if needed
+            if (this.bots.size < this.maxConcurrentBots) {
+                await this.initializeAdditionalBots()
             }
         }
     }
@@ -859,6 +875,30 @@ export class InspectService implements OnModuleInit {
                     this.logger.error(`Failed to remove bot ${username}: ${error.message}`);
                 }
             }
+        }
+    }
+
+    private async resetInitializationCounter() {
+        // Count actual initialized bots
+        const actualBotCount = this.bots.size
+        if (actualBotCount !== this.initializedBots) {
+            this.logger.warn(`Fixing initialization counter mismatch: actual=${actualBotCount}, recorded=${this.initializedBots}`)
+            this.initializedBots = actualBotCount
+        }
+    }
+
+    @Cron('*/5 * * * *') // Run every 5 minutes
+    private async verifyBotCounts() {
+        await this.resetInitializationCounter()
+
+        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length
+        const totalBots = this.bots.size
+
+        this.logger.debug(`Bot status check - Ready: ${readyBots}, Total: ${totalBots}, Initialized: ${this.initializedBots}`)
+
+        // If we're below target and have capacity to add more
+        if (totalBots < this.maxConcurrentBots && this.initializedBots < this.accounts.length) {
+            await this.initializeAdditionalBots()
         }
     }
 }
