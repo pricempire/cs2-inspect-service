@@ -31,6 +31,7 @@ export class InspectService implements OnModuleInit {
     private currentRequests = 0
     private requests: number[] = []
     private initializedBots = 0
+    private minBots = 80;
     private maxConcurrentBots = 80 // Reduced from 120 to maintain ~60% utilization
     private botsToAddWhenNeeded = 20 // Reduced from 50 to maintain better control
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
@@ -51,9 +52,22 @@ export class InspectService implements OnModuleInit {
     // Add new property to track initial bots ready state
     private initialBotsReady = false;
 
-    private readonly TARGET_UTILIZATION = 0.6 // 60% target utilization
-    private readonly MIN_UTILIZATION = 0.5 // 50% minimum before scaling down
-    private readonly MAX_UTILIZATION = 0.7 // 70% maximum before scaling up
+    // Updated scaling constants
+    private readonly MIN_BOTS = 40;
+    private readonly MAX_BOTS = 120;
+    private readonly SCALE_STEP = 10; // Add/remove bots in smaller increments
+    private readonly SCALE_COOLDOWN = 30000; // 30 seconds between scaling operations
+    private readonly INIT_BATCH_SIZE = 20; // Initialize bots in smaller batches
+
+    // Utilization thresholds
+    private readonly TARGET_UTILIZATION = 0.6; // 60%
+    private readonly SCALE_UP_THRESHOLD = 0.75; // Scale up at 75% utilization
+    private readonly SCALE_DOWN_THRESHOLD = 0.45; // Scale down at 45% utilization
+
+    // Tracking variables
+    private lastScaleOperation = 0;
+    private isScaling = false;
+    private targetBotCount = this.MIN_BOTS;
 
     constructor(
         private parseService: ParseService,
@@ -70,29 +84,55 @@ export class InspectService implements OnModuleInit {
         this.logger.debug('Starting Inspect Module...')
         this.accounts = await this.loadAccounts()
 
-        if (this.maxConcurrentBots > this.accounts.length) {
-            this.maxConcurrentBots = this.accounts.length
-        }
+        // Initialize bots in batches
+        await this.initializeInitialBots();
+    }
 
-        // Initialize minimum number of bots with delay
-        for (let i = 0; i < this.maxConcurrentBots; i++) {
-            if (this.accounts[i]) {
-                const [username, password] = this.accounts[i].split(':')
-                await this.initializeBot(username, password)
-                // Add delay between initializations
-                await new Promise(resolve => setTimeout(resolve, this.BOT_INIT_DELAY))
+    /**
+     * Initialize initial set of bots in batches
+     */
+    private async initializeInitialBots() {
+        const initializeBatch = async (startIndex: number, count: number) => {
+            const endIndex = Math.min(startIndex + count, this.accounts.length);
+            const promises = [];
+
+            for (let i = startIndex; i < endIndex; i++) {
+                const [username, password] = this.accounts[i].split(':');
+                promises.push(this.initializeBot(username, password));
+                // Small delay between each bot in the batch
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
+
+            await Promise.allSettled(promises);
+        };
+
+        // Initialize bots in batches
+        for (let i = 0; i < this.MIN_BOTS; i += this.INIT_BATCH_SIZE) {
+            await initializeBatch(i, this.INIT_BATCH_SIZE);
+            // Delay between batches
+            await new Promise(resolve => setTimeout(resolve, 2000));
         }
 
-        // Set initial bots as ready if we have enough ready bots
+        // Start monitoring readiness
+        this.monitorBotsReadiness();
+    }
 
-        let iv = setInterval(() => {
+    /**
+     * Monitor bot readiness state
+     */
+    private monitorBotsReadiness() {
+        const checkReadiness = () => {
             const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
-            this.initialBotsReady = readyBots >= this.maxConcurrentBots * 0.6; // 60% of bots should be ready
-            if (this.initialBotsReady) {
-                clearInterval(iv)
+            this.initialBotsReady = readyBots >= this.MIN_BOTS * 0.8; // 80% of minimum bots should be ready
+
+            if (!this.initialBotsReady) {
+                setTimeout(checkReadiness, 1000);
+            } else {
+                this.logger.debug(`Service ready with ${readyBots} bots`);
             }
-        }, 1000)
+        };
+
+        checkReadiness();
     }
 
     /**
@@ -109,8 +149,8 @@ export class InspectService implements OnModuleInit {
         const uptime = Date.now() - this.startTime
         const days = Math.floor(uptime / (24 * 60 * 60 * 1000))
         const hours = Math.floor((uptime % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000))
-        const minutes = Math.floor((uptime % (60 * 60 * 1000)) / (60 * 1000))
-        const seconds = Math.floor((uptime % (60 * 1000)) / 1000)
+        const minutes = Math.floor((uptime % (60 * 60 * 1000)) / (60 * 60 * 1000))
+        const seconds = Math.floor((uptime % (60 * 60 * 1000)) / (60 * 1000))
 
         // Calculate average request processing time
         const activeInspects = Array.from(this.inspects.values())
@@ -136,6 +176,7 @@ export class InspectService implements OnModuleInit {
                 total: totalBots,
                 initialized: this.initializedBots,
                 maxConcurrent: this.maxConcurrentBots,
+                minBots: this.minBots,
                 utilization: (totalBots > 0 ? (busyBots / totalBots) * 100 : 0).toFixed(2) + '%'
             },
             queue: {
@@ -368,12 +409,16 @@ export class InspectService implements OnModuleInit {
      * @returns 
      */
     private async initializeAdditionalBots() {
+        // Check if initialization is already in progress
         if (this.initializationInProgress) {
+            // this.logger.debug('Bot initialization already in progress, skipping...');
             return [];
         }
 
+        // Check debounce time
         const now = Date.now();
         if (now - this.lastInitializationTime < this.DEBOUNCE_DELAY) {
+            // this.logger.debug('Initialization requested too soon, skipping...');
             return [];
         }
 
@@ -381,18 +426,10 @@ export class InspectService implements OnModuleInit {
             this.initializationInProgress = true;
             this.lastInitializationTime = now;
 
-            // Verify current counts
-            await this.resetInitializationCounter()
-
             const botsToAdd = Math.min(
                 this.botsToAddWhenNeeded,
-                this.accounts.length - this.initializedBots,
-                this.maxConcurrentBots - this.bots.size // Add this check
+                this.accounts.length - this.initializedBots
             )
-
-            if (botsToAdd <= 0) {
-                return [];
-            }
 
             this.logger.debug(`Initializing ${botsToAdd} additional bots...`);
 
@@ -462,7 +499,7 @@ export class InspectService implements OnModuleInit {
     private async cleanupInactiveBots() {
         const now = Date.now()
         const botsToRemove: string[] = []
-        let removedCount = 0
+        let removedCount = 0  // Add this to track actual removals
 
         // Find inactive bots
         this.botLastUsedTime.forEach((lastUsed, username) => {
@@ -470,6 +507,10 @@ export class InspectService implements OnModuleInit {
                 botsToRemove.push(username)
             }
         })
+
+        if (this.minBots === this.bots.size) {
+            return // No need to remove bots if we're at the max concurrent bots
+        }
 
         // Remove inactive bots
         for (const username of botsToRemove) {
@@ -479,7 +520,7 @@ export class InspectService implements OnModuleInit {
                     await bot.destroy()
                     this.bots.delete(username)
                     this.botLastUsedTime.delete(username)
-                    removedCount++
+                    removedCount++  // Increment counter for successful removals
                     this.logger.debug(`Removed inactive bot ${username}`)
                 } catch (error) {
                     this.logger.error(`Failed to remove bot ${username}: ${error.message}`)
@@ -487,13 +528,13 @@ export class InspectService implements OnModuleInit {
             }
         }
 
-        // Update initialization counter
+        // Update initialization counter with actual removed count
         if (removedCount > 0) {
             this.initializedBots = Math.max(0, this.initializedBots - removedCount)
             this.logger.debug(`Removed ${removedCount} bots, new initialized count: ${this.initializedBots}`)
 
             // Trigger initialization of new bots if needed
-            if (this.bots.size < this.maxConcurrentBots) {
+            if (this.bots.size < this.minBots) {
                 await this.initializeAdditionalBots()
             }
         }
@@ -821,84 +862,82 @@ export class InspectService implements OnModuleInit {
         return this.bots.size || this.maxConcurrentBots; // Fallback to initial bot count if no bots yet
     }
 
-    @Cron('*/30 * * * * *') // Run every 30 seconds
+    @Cron('*/15 * * * * *') // Run every 15 seconds
     private async adjustBotCount() {
+        if (this.isScaling || Date.now() - this.lastScaleOperation < this.SCALE_COOLDOWN) {
+            return;
+        }
+
         const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
         const busyBots = Array.from(this.bots.values()).filter(bot => !bot.isReady()).length;
         const totalBots = this.bots.size;
-
-        if (totalBots === 0) return;
-
         const currentUtilization = busyBots / totalBots;
 
-        // Scale up if utilization is too high
-        if (currentUtilization > this.MAX_UTILIZATION) {
-            const additionalBotsNeeded = Math.min(
-                this.botsToAddWhenNeeded,
-                this.accounts.length - this.initializedBots
-            );
-            if (additionalBotsNeeded > 0) {
-                this.logger.debug(`High utilization (${(currentUtilization * 100).toFixed(1)}%), adding ${additionalBotsNeeded} bots`);
-                await this.initializeAdditionalBots();
-            }
-        }
+        try {
+            this.isScaling = true;
 
-        // Scale down if utilization is too low
-        else if (currentUtilization < this.MIN_UTILIZATION && totalBots > this.maxConcurrentBots) {
-            const botsToRemove = Math.min(
-                Math.ceil(totalBots * 0.1), // Remove up to 10% of bots
-                totalBots - this.maxConcurrentBots
-            );
-            if (botsToRemove > 0) {
-                this.logger.debug(`Low utilization (${(currentUtilization * 100).toFixed(1)}%), removing ${botsToRemove} bots`);
-                await this.removeInactiveBots(botsToRemove);
+            if (currentUtilization > this.SCALE_UP_THRESHOLD && totalBots < this.MAX_BOTS) {
+                this.targetBotCount = Math.min(
+                    totalBots + this.SCALE_STEP,
+                    this.MAX_BOTS
+                );
+                await this.scaleUp();
+            } else if (currentUtilization < this.SCALE_DOWN_THRESHOLD && totalBots > this.MIN_BOTS) {
+                this.targetBotCount = Math.max(
+                    totalBots - this.SCALE_STEP,
+                    this.MIN_BOTS
+                );
+                await this.scaleDown();
             }
+        } finally {
+            this.isScaling = false;
+            this.lastScaleOperation = Date.now();
         }
     }
 
-    private async removeInactiveBots(count: number) {
-        const now = Date.now();
+    /**
+     * Scale up bot count
+     */
+    private async scaleUp() {
+        const botsToAdd = this.targetBotCount - this.bots.size;
+        if (botsToAdd <= 0) return;
+
+        this.logger.debug(`Scaling up by ${botsToAdd} bots`);
+
+        const startIndex = this.initializedBots;
+        const promises = [];
+
+        for (let i = 0; i < botsToAdd && startIndex + i < this.accounts.length; i++) {
+            const [username, password] = this.accounts[startIndex + i].split(':');
+            promises.push(this.initializeBot(username, password));
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        await Promise.allSettled(promises);
+    }
+
+    /**
+     * Scale down bot count
+     */
+    private async scaleDown() {
+        const botsToRemove = this.bots.size - this.targetBotCount;
+        if (botsToRemove <= 0) return;
+
+        this.logger.debug(`Scaling down by ${botsToRemove} bots`);
+
+        // Sort bots by last used time
         const sortedBots = Array.from(this.botLastUsedTime.entries())
             .sort(([, lastUsedA], [, lastUsedB]) => lastUsedA - lastUsedB)
-            .slice(0, count);
+            .slice(0, botsToRemove);
 
         for (const [username] of sortedBots) {
             const bot = this.bots.get(username);
-            if (bot && bot.isReady()) {
-                try {
-                    await bot.destroy();
-                    this.bots.delete(username);
-                    this.botLastUsedTime.delete(username);
-                    this.initializedBots--;
-                    this.logger.debug(`Removed underutilized bot ${username}`);
-                } catch (error) {
-                    this.logger.error(`Failed to remove bot ${username}: ${error.message}`);
-                }
+            if (bot?.isReady()) {
+                await bot.destroy();
+                this.bots.delete(username);
+                this.botLastUsedTime.delete(username);
+                this.initializedBots--;
             }
-        }
-    }
-
-    private async resetInitializationCounter() {
-        // Count actual initialized bots
-        const actualBotCount = this.bots.size
-        if (actualBotCount !== this.initializedBots) {
-            this.logger.warn(`Fixing initialization counter mismatch: actual=${actualBotCount}, recorded=${this.initializedBots}`)
-            this.initializedBots = actualBotCount
-        }
-    }
-
-    @Cron('*/5 * * * *') // Run every 5 minutes
-    private async verifyBotCounts() {
-        await this.resetInitializationCounter()
-
-        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length
-        const totalBots = this.bots.size
-
-        this.logger.debug(`Bot status check - Ready: ${readyBots}, Total: ${totalBots}, Initialized: ${this.initializedBots}`)
-
-        // If we're below target and have capacity to add more
-        if (totalBots < this.maxConcurrentBots && this.initializedBots < this.accounts.length) {
-            await this.initializeAdditionalBots()
         }
     }
 }
