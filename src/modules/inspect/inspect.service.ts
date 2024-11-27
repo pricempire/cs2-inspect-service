@@ -392,11 +392,6 @@ export class InspectService implements OnModuleInit {
             this.botLastUsedTime.set(username, Date.now())
             this.logger.debug(`Bot ${username} initialized successfully`)
         } catch (error) {
-            if (error.message.includes('Account Login Denied Throttle')) {
-                this.logger.warn(`Skipping bot ${username} due to login throttle`)
-
-                return false;
-            }
             this.logger.error(`Failed to initialize bot ${username}: ${error.message}`)
             return false;
         }
