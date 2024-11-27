@@ -5,6 +5,7 @@ import {
     Entity,
     Index,
     PrimaryColumn,
+    UpdateDateColumn,
 } from 'typeorm'
 
 
@@ -160,4 +161,7 @@ export class Asset {
 
     @CreateDateColumn()
     createdAt: Date
+
+    @UpdateDateColumn()
+    updatedAt: Date
 }

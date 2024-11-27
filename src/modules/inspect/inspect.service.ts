@@ -30,7 +30,6 @@ export class InspectService implements OnModuleInit {
     private nextBot = 0
     private currentRequests = 0
     private requests: number[] = []
-    private initializedBots = 0
     private minBots = 80;
     private botsToAddWhenNeeded = 20 // Reduced from 50 to maintain better control
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
@@ -173,7 +172,6 @@ export class InspectService implements OnModuleInit {
                 ready: readyBots,
                 busy: busyBots,
                 total: totalBots,
-                initialized: this.initializedBots,
                 minBots: this.minBots,
                 utilization: (totalBots > 0 ? (busyBots / totalBots) * 100 : 0).toFixed(2) + '%'
             },
@@ -395,7 +393,6 @@ export class InspectService implements OnModuleInit {
             await bot.initialize()
             this.bots.set(username, bot)
             this.botLastUsedTime.set(username, Date.now())
-            this.initializedBots++
             this.logger.debug(`Bot ${username} initialized successfully`)
         } catch (error) {
             this.logger.error(`Failed to initialize bot ${username}: ${error.message}`)
@@ -426,14 +423,14 @@ export class InspectService implements OnModuleInit {
 
             const botsToAdd = Math.min(
                 this.botsToAddWhenNeeded,
-                this.accounts.length - this.initializedBots
+                this.accounts.length - this.bots.size
             )
 
             this.logger.debug(`Initializing ${botsToAdd} additional bots...`);
 
             const newBots: Bot[] = []
             for (let i = 0; i < botsToAdd; i++) {
-                const nextAccountIndex = this.initializedBots
+                const nextAccountIndex = this.bots.size
                 if (nextAccountIndex >= this.accounts.length) break
 
                 const [username, password] = this.accounts[nextAccountIndex].split(':')
@@ -459,7 +456,7 @@ export class InspectService implements OnModuleInit {
 
         if (readyBots.length === 0) {
             // If no bots are ready and we haven't initialized all accounts
-            if (this.initializedBots < this.accounts.length) {
+            if (this.bots.size < this.accounts.length) {
                 const newBots = await this.initializeAdditionalBots()
                 if (newBots.length > 0) {
                     return newBots[0] // Return the first new bot
@@ -528,8 +525,7 @@ export class InspectService implements OnModuleInit {
 
         // Update initialization counter with actual removed count
         if (removedCount > 0) {
-            this.initializedBots = Math.max(0, this.initializedBots - removedCount)
-            this.logger.debug(`Removed ${removedCount} bots, new initialized count: ${this.initializedBots}`)
+            this.logger.debug(`Removed ${removedCount} bots, new initialized count: ${this.bots.size}`)
 
             // Trigger initialization of new bots if needed
             if (this.bots.size < this.minBots) {
@@ -902,7 +898,7 @@ export class InspectService implements OnModuleInit {
 
         this.logger.debug(`Scaling up by ${botsToAdd} bots`);
 
-        const startIndex = this.initializedBots;
+        const startIndex = this.bots.size;
         const promises = [];
 
         for (let i = 0; i < botsToAdd && startIndex + i < this.accounts.length; i++) {
@@ -934,7 +930,6 @@ export class InspectService implements OnModuleInit {
                 await bot.destroy();
                 this.bots.delete(username);
                 this.botLastUsedTime.delete(username);
-                this.initializedBots--;
             }
         }
     }
