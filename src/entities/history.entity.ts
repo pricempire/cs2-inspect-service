@@ -59,11 +59,12 @@ export enum HistoryType {
 
 
 @Entity()
-@Index('history_unique_id', ['uniqueId'], { unique: true })
+@Index('history_unique_id', ['uniqueId'])
 @Index('history_asset_tracking', ['assetId', 'prevAssetId'])
 @Index('history_ownership', ['owner', 'prevOwner'])
 @Index('history_timeline', ['createdAt', 'type'])
 @Index('history_details', ['d', 'type'])
+@Index('history_asset_id', ['assetId'], { unique: true })
 export class History {
     @Column()
     uniqueId: string;
