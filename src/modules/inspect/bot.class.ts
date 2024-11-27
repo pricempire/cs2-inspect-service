@@ -131,7 +131,9 @@ export class Bot {
         })
 
         this.cs2Instance.on('debug', (msg) => {
-            this.logger.debug(`${this.username}: ${msg}`)
+            if (process.env.GC_DEBUG === 'true') {
+                this.logger.debug(`${this.username}: ${msg}`)
+            }
         })
     }
 

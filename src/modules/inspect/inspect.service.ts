@@ -380,13 +380,10 @@ export class InspectService implements OnModuleInit {
      */
     private async initializeBot(username: string, password: string) {
         try {
-            // Calculate which session this bot should use 
-            const proxyUrl = process.env.PROXY_URL
-
             const bot = new Bot(
                 username,
                 password,
-                proxyUrl,
+                process.env.PROXY_URL,
                 (response) => this.handleInspectResult(username, response)
             )
 
