@@ -392,8 +392,16 @@ export class InspectService implements OnModuleInit {
             this.botLastUsedTime.set(username, Date.now())
             this.logger.debug(`Bot ${username} initialized successfully`)
         } catch (error) {
+            if (error.message.includes('Account Login Denied Throttle')) {
+                this.logger.warn(`Skipping bot ${username} due to login throttle`)
+
+                return false;
+            }
             this.logger.error(`Failed to initialize bot ${username}: ${error.message}`)
+            return false;
         }
+
+        return true;
     }
 
     /**
@@ -431,10 +439,11 @@ export class InspectService implements OnModuleInit {
                 if (nextAccountIndex >= this.accounts.length) break
 
                 const [username, password] = this.accounts[nextAccountIndex].split(':')
-                await this.initializeBot(username, password)
-                await new Promise(resolve => setTimeout(resolve, this.BOT_INIT_DELAY))
-                const newBot = this.bots.get(username)
-                if (newBot) newBots.push(newBot)
+                if (await this.initializeBot(username, password)) {
+                    await new Promise(resolve => setTimeout(resolve, this.BOT_INIT_DELAY))
+                    const newBot = this.bots.get(username)
+                    if (newBot) newBots.push(newBot)
+                }
             }
 
             return newBots.filter(bot => bot?.isReady())

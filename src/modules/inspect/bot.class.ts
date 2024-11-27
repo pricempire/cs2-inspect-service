@@ -80,6 +80,11 @@ export class Bot {
             if (err.toString().includes('Account Disabled')) {
             }
 
+            if (err.toString().includes('AccountLoginDeniedThrottle')) {
+                this.logger.error(`${this.username}: Account Login Denied Throttle`)
+                throw new Error('Account Login Denied Throttle')
+            }
+
             console.log(err)
         })
 
