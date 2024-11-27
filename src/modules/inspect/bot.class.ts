@@ -190,11 +190,6 @@ export class Bot {
         }, this.inspectTimeout)
 
         this.cs2Instance.inspectItem(s !== '0' ? s : a, a, d)
-
-        // Add grace period after inspection
-        setTimeout(() => {
-            this.busy = false
-        }, this.graceTimeout)
     }
 
     public disconnect() {
