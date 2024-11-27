@@ -14,7 +14,7 @@ export class Bot {
     private readonly onHoldTimeout = 60000 // 60 seconds
     private client: any // Replace 'any' with your actual Steam client type
     private interval: NodeJS.Timeout | null = null
-    private readonly graceTimeout = 20000 // 20 seconds grace period 
+    private sessionCount = 0
 
     private readonly loginErrors = {
         61: 'Invalid Password',
@@ -44,7 +44,9 @@ export class Bot {
             this.steamUser.removeAllListeners()
         }
 
-        const proxyUrl = this.proxyUrl.replace('[session]', this.username.toString())
+        const proxyUrl = this.proxyUrl
+            .replace('[session]', `${this.username}_${this.sessionCount}`)
+        this.sessionCount++
 
         this.steamUser = new SteamUser({
             promptSteamGuardCode: false,
@@ -74,7 +76,8 @@ export class Bot {
                 err.toString().includes('NetworkUnreachable') ||
                 err.toString().includes('ECONNREFUSED')
             ) {
-                this.initialize() // Reinitialize on these errors
+                this.logger.debug(`${this.username}: Reconnecting with new session ${this.sessionCount}`)
+                this.initialize() // Reinitialize with incremented session
             }
 
             if (err.toString().includes('Account Disabled')) {
