@@ -637,15 +637,8 @@ export class InspectService implements OnModuleInit {
      * @param uniqueId 
      */
     private async saveHistory(response: any, history: any, inspectData: any, uniqueId: string) {
-        const existing = await this.historyRepository.findOne({
-            where: {
-                assetId: parseInt(response.itemid),
-            },
-        })
-
-        if (!existing) {
-
-            await this.historyRepository.save({
+        try {
+            await this.historyRepository.upsert({
                 uniqueId,
                 assetId: parseInt(response.itemid),
                 prevAssetId: history?.assetId,
@@ -657,7 +650,10 @@ export class InspectService implements OnModuleInit {
                 prevStickers: history?.stickers,
                 prevKeychains: history?.keychains,
                 type: this.getHistoryType(response, history, inspectData),
-            })
+            }, ['uniqueId']) // Use uniqueId as the conflict column
+        } catch (error) {
+            // Log the error but don't throw it to prevent the entire inspection from failing
+            this.logger.warn(`Failed to save history for asset ${response.itemid}: ${error.message}`)
         }
     }
 

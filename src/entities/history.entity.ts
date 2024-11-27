@@ -65,13 +65,13 @@ export enum HistoryType {
 @Index('history_timeline', ['createdAt', 'type'])
 @Index('history_details', ['d', 'type'])
 export class History {
-    @Column()
-    uniqueId: string;
-
     @PrimaryColumn({
         type: 'bigint',
     })
     assetId: number
+
+    @Column()
+    uniqueId: string;
 
     @Column({
         type: 'bigint',
