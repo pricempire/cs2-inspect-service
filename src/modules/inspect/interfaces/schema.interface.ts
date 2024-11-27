@@ -65,5 +65,6 @@ export interface FormattedResponse {
         keychains?: StickerKeychain[];
         min?: number;
         max?: number;
+        phase?: string;
     };
 } 
