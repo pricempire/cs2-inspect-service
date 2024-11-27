@@ -32,7 +32,6 @@ export class InspectService implements OnModuleInit {
     private requests: number[] = []
     private initializedBots = 0
     private minBots = 80;
-    private maxConcurrentBots = 80 // Reduced from 120 to maintain ~60% utilization
     private botsToAddWhenNeeded = 20 // Reduced from 50 to maintain better control
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
@@ -175,7 +174,6 @@ export class InspectService implements OnModuleInit {
                 busy: busyBots,
                 total: totalBots,
                 initialized: this.initializedBots,
-                maxConcurrent: this.maxConcurrentBots,
                 minBots: this.minBots,
                 utilization: (totalBots > 0 ? (busyBots / totalBots) * 100 : 0).toFixed(2) + '%'
             },
@@ -859,7 +857,7 @@ export class InspectService implements OnModuleInit {
 
     // Remove the static MAX_QUEUE_SIZE constant and add a getter
     private get MAX_QUEUE_SIZE(): number {
-        return this.bots.size || this.maxConcurrentBots; // Fallback to initial bot count if no bots yet
+        return this.bots.size * 2; // Fallback to initial bot count if no bots yet
     }
 
     @Cron('*/15 * * * * *') // Run every 15 seconds
