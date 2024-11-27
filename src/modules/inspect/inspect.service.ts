@@ -650,9 +650,11 @@ export class InspectService implements OnModuleInit {
                 prevStickers: history?.stickers,
                 prevKeychains: history?.keychains,
                 type: this.getHistoryType(response, history, inspectData),
-            }, ['uniqueId']) // Use uniqueId as the conflict column
+            }, {
+                conflictPaths: ['assetId', 'uniqueId'],  // Specify both fields for the conflict constraint
+                skipUpdateIfNoValuesChanged: true
+            })
         } catch (error) {
-            // Log the error but don't throw it to prevent the entire inspection from failing
             this.logger.warn(`Failed to save history for asset ${response.itemid}: ${error.message}`)
         }
     }
