@@ -30,7 +30,7 @@ export class InspectService implements OnModuleInit {
     private nextBot = 0
     private currentRequests = 0
     private requests: number[] = []
-    private minBots = 80;
+    private minBots = 480;
     private botsToAddWhenNeeded = 20 // Reduced from 50 to maintain better control
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
@@ -855,7 +855,7 @@ export class InspectService implements OnModuleInit {
         return this.bots.size * 2; // Fallback to initial bot count if no bots yet
     }
 
-    @Cron('*/15 * * * * *') // Run every 15 seconds
+    // @Cron('*/15 * * * * *') // Run every 15 seconds
     private async adjustBotCount() {
         if (this.isScaling || Date.now() - this.lastScaleOperation < this.SCALE_COOLDOWN) {
             return;
