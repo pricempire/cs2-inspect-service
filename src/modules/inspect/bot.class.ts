@@ -20,7 +20,8 @@ export enum BotError {
     CONNECTION_ERROR = 'CONNECTION_ERROR',
     INITIALIZATION_ERROR = 'INITIALIZATION_ERROR',
     TIMEOUT = 'TIMEOUT',
-    GC_ERROR = 'GC_ERROR'
+    GC_ERROR = 'GC_ERROR',
+    LOGIN_THROTTLED = 'LOGIN_THROTTLED'
 }
 
 interface BotConfig {
@@ -201,6 +202,7 @@ export class Bot extends EventEmitter {
         if (error.message.includes('RateLimit')) return BotError.RATE_LIMITED
         if (error.message.includes('AccountDisabled')) return BotError.ACCOUNT_DISABLED
         if (error.message.includes('NetworkUnreachable')) return BotError.CONNECTION_ERROR
+        if (error.message.includes('AccountLoginDeniedThrottle')) return BotError.LOGIN_THROTTLED
         return BotError.INITIALIZATION_ERROR
     }
 

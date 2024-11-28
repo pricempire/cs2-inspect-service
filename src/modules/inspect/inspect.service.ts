@@ -27,6 +27,8 @@ export class InspectService implements OnModuleInit {
     private readonly QUEUE_TIMEOUT = 5000 // 5 seconds timeout
     private readonly MAX_RETRIES = 3
     private readonly MAX_QUEUE_SIZE = 100
+    private throttledAccounts: Map<string, number> = new Map()
+    private readonly THROTTLE_COOLDOWN = 30 * 60 * 1000 // 30 minutes in milliseconds
 
     private bots: Map<string, Bot> = new Map()
     private accounts: string[] = []
@@ -119,6 +121,14 @@ export class InspectService implements OnModuleInit {
             const batch = this.accounts.slice(i, i + BATCH_SIZE);
             const initPromises = batch.map(async (account) => {
                 const [username, password] = account.split(':');
+
+                // Check if account is throttled
+                const throttleExpiry = this.throttledAccounts.get(username);
+                if (throttleExpiry && Date.now() < throttleExpiry) {
+                    this.logger.warn(`Account ${username} is throttled. Skipping initialization.`);
+                    return;
+                }
+
                 let retryCount = 0;
                 let initialized = false;
 
@@ -140,16 +150,19 @@ export class InspectService implements OnModuleInit {
                         this.bots.set(username, bot);
                         this.logger.debug(`Bot ${username} initialized successfully`);
                         initialized = true;
+                        // Clear throttle status if successful
+                        this.throttledAccounts.delete(username);
 
                     } catch (error) {
                         if (error.message === 'ACCOUNT_DISABLED') {
                             this.logger.error(`Account ${username} is disabled. Blacklisting...`);
-                            // Remove from accounts array
                             this.accounts = this.accounts.filter(acc => !acc.startsWith(username));
-                            // Could also write to a blacklist file here if needed
-                            break; // Exit retry loop
+                            break;
+                        } else if (error.message === 'LOGIN_THROTTLED') {
+                            this.logger.warn(`Account ${username} is throttled. Adding to cooldown.`);
+                            this.throttledAccounts.set(username, Date.now() + this.THROTTLE_COOLDOWN);
+                            break;
                         } else if (error.message === 'INITIALIZATION_ERROR') {
-                            retryCount++;
                             this.logger.warn(`Initialization timeout for bot ${username}. Retrying...`);
                             if (retryCount >= MAX_RETRIES) {
                                 this.logger.error(`Max retries reached for bot ${username}. Initialization failed.`);
@@ -157,6 +170,7 @@ export class InspectService implements OnModuleInit {
                         } else {
                             this.logger.error(`Failed to initialize bot ${username}: ${error.message}`);
                         }
+                        retryCount++;
                     }
                 }
             });
@@ -600,6 +614,17 @@ export class InspectService implements OnModuleInit {
                 this.inspects.delete(assetId)
                 this.failed++
                 this.logger.warn(`Cleaned up stale request for asset ${assetId}`)
+            }
+        }
+    }
+
+    @Cron('*/5 * * * *') // Run every 5 minutes
+    private cleanupThrottledAccounts() {
+        const now = Date.now();
+        for (const [username, expiry] of this.throttledAccounts.entries()) {
+            if (now >= expiry) {
+                this.throttledAccounts.delete(username);
+                this.logger.debug(`Removed ${username} from throttle list`);
             }
         }
     }
