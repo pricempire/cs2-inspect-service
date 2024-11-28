@@ -89,7 +89,7 @@ export class InspectService implements OnModuleInit {
         this.accounts = await this.loadAccounts()
 
         // Initialize bots in batches
-        await this.initializeInitialBots();
+        this.initializeInitialBots();
     }
 
     /**
