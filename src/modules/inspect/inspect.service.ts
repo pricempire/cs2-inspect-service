@@ -142,7 +142,13 @@ export class InspectService implements OnModuleInit {
                         initialized = true;
 
                     } catch (error) {
-                        if (error.message === 'INITIALIZATION_ERROR') {
+                        if (error.message === 'ACCOUNT_DISABLED') {
+                            this.logger.error(`Account ${username} is disabled. Blacklisting...`);
+                            // Remove from accounts array
+                            this.accounts = this.accounts.filter(acc => !acc.startsWith(username));
+                            // Could also write to a blacklist file here if needed
+                            break; // Exit retry loop
+                        } else if (error.message === 'INITIALIZATION_ERROR') {
                             retryCount++;
                             this.logger.warn(`Initialization timeout for bot ${username}. Retrying...`);
                             if (retryCount >= MAX_RETRIES) {
