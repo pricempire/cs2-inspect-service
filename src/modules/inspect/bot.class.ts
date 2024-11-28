@@ -1,302 +1,361 @@
 import * as SteamUser from 'steam-user'
 import * as GlobalOffensive from 'globaloffensive'
 import { Logger } from '@nestjs/common'
+import { EventEmitter } from 'events'
 
-export class Bot {
+export enum BotStatus {
+    IDLE = 'IDLE',
+    INITIALIZING = 'INITIALIZING',
+    READY = 'READY',
+    BUSY = 'BUSY',
+    ERROR = 'ERROR',
+    COOLDOWN = 'COOLDOWN',
+    DISCONNECTED = 'DISCONNECTED'
+}
+
+export enum BotError {
+    INVALID_CREDENTIALS = 'INVALID_CREDENTIALS',
+    RATE_LIMITED = 'RATE_LIMITED',
+    ACCOUNT_DISABLED = 'ACCOUNT_DISABLED',
+    CONNECTION_ERROR = 'CONNECTION_ERROR',
+    INITIALIZATION_ERROR = 'INITIALIZATION_ERROR',
+    TIMEOUT = 'TIMEOUT',
+    GC_ERROR = 'GC_ERROR'
+}
+
+interface BotConfig {
+    username: string
+    password: string
+    proxyUrl?: string
+    initTimeout?: number
+    inspectTimeout?: number
+    cooldownTime?: number
+    maxRetries?: number
+    debug?: boolean
+}
+
+export class Bot extends EventEmitter {
     private readonly logger = new Logger(Bot.name)
-    private steamUser: SteamUser
-    private cs2Instance: GlobalOffensive
-    private ready = false
-    private busy = false
-    private onHold = false
-    private ttl: NodeJS.Timeout | null = null
-    private readonly inspectTimeout = 3000 // 3 seconds
-    private readonly onHoldTimeout = 60000 // 60 seconds
-    private client: any // Replace 'any' with your actual Steam client type
-    private interval: NodeJS.Timeout | null = null
-    private sessionCount = 0
+    private steamUser: SteamUser | null = null
+    private cs2Instance: GlobalOffensive | null = null
+    private status: BotStatus = BotStatus.IDLE
+    private retryCount = 0
+    private sessionId = 0
+    private currentInspectTimeout: NodeJS.Timeout | null = null
+    private initializationTimeout: NodeJS.Timeout | null = null
+    private cooldownTimeout: NodeJS.Timeout | null = null
 
-    private readonly loginErrors = {
-        61: 'Invalid Password',
-        63: 'Account login denied due to 2nd factor authentication failure. If using email auth, an email has been sent.',
-        65: 'Account login denied due to auth code being invalid',
-        66: 'Account login denied due to 2nd factor auth failure and no mail has been sent',
+    private readonly config: Required<BotConfig>
+
+    constructor(config: BotConfig) {
+        super()
+        this.config = {
+            initTimeout: 30000,
+            inspectTimeout: 5000,
+            cooldownTime: 60000,
+            maxRetries: 3,
+            debug: false,
+            proxyUrl: '',
+            ...config
+        }
     }
 
-    constructor(
-        public readonly username: string,
-        private readonly password: string,
-        private readonly proxyUrl: string,
-        private readonly onInspectResult: (response: any) => void,
-    ) { }
+    public get currentStatus(): BotStatus {
+        return this.status
+    }
 
-    async initialize() {
+    public isAvailable(): boolean {
+        return this.status === BotStatus.READY
+    }
+
+    public async initialize(): Promise<void> {
+        if (this.status === BotStatus.INITIALIZING) {
+            throw new Error('Bot is already initializing')
+        }
+
+        this.cleanup()
+        this.status = BotStatus.INITIALIZING
+        this.sessionId++
+
+        try {
+            await this.initializeWithTimeout()
+        } catch (error) {
+            this.handleInitializationError(error)
+            throw error
+        }
+    }
+
+    private async initializeWithTimeout(): Promise<void> {
         return new Promise((resolve, reject) => {
-            // Set a timeout for the entire initialization process
-            const initTimeout = setTimeout(() => {
-                reject(new Error('Initialization timeout'));
-            }, 30000); // 30 second timeout
+            let initComplete = false
 
-            // Track required events for successful initialization
-            let loggedOn = false;
-            let gcConnected = false;
+            this.initializationTimeout = setTimeout(() => {
+                if (!initComplete) {
+                    this.cleanup()
+                    reject(new Error('Initialization timeout'))
+                }
+            }, this.config.initTimeout)
+
+            this.setupSteamUser()
+            this.setupCS2Instance()
 
             const checkInitComplete = () => {
-                if (loggedOn && gcConnected) {
-                    clearTimeout(initTimeout);
-                    resolve(true);
-                }
-            };
+                initComplete = true
+                clearTimeout(this.initializationTimeout!)
+                this.retryCount = 0
+                resolve()
+            }
 
-            this.createSteamUser();
-            this.createCS2Instance();
+            this.steamUser!.on('loggedOn', checkInitComplete)
+            this.cs2Instance!.on('connectedToGC', checkInitComplete)
 
-            // Add initialization-specific event handlers
-            const initHandlers = {
-                error: (err) => {
-                    clearTimeout(initTimeout);
-                    reject(err);
-                },
-                loggedOn: () => {
-                    loggedOn = true;
-                    checkInitComplete();
-                }
-            };
-
-            // Add GC-specific event handlers
-            this.cs2Instance.once('connectedToGC', () => {
-                gcConnected = true;
-                checkInitComplete();
-            });
-
-            // Add error handlers for initialization period
-            this.steamUser.once('error', initHandlers.error);
-            this.steamUser.once('loggedOn', initHandlers.loggedOn);
-
-            // Start login process
-            this.login();
-
-            // Cleanup function to remove temporary handlers if initialization fails
-            const cleanup = () => {
-                this.steamUser.removeListener('error', initHandlers.error);
-                this.steamUser.removeListener('loggedOn', initHandlers.loggedOn);
-            };
-
-            // Add cleanup to both success and failure paths
-            Promise.race([
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Init timeout')), 30000))
-            ]).catch(error => {
-                cleanup();
-                reject(error);
-            });
-        });
+            this.login()
+        })
     }
 
-    private createSteamUser() {
-        this.logger.debug(`Creating Steam User for ${this.username}`)
-
+    private setupSteamUser(): void {
         if (this.steamUser) {
-            this.logger.error(`Bot for ${this.username} already exists`)
             this.steamUser.removeAllListeners()
         }
 
-        const proxyUrl = this.proxyUrl
-            .replace('[session]', `${this.username}_${this.sessionCount}`)
-        this.sessionCount++
+        const proxyConfig = this.getProxyConfig()
 
         this.steamUser = new SteamUser({
             promptSteamGuardCode: false,
             enablePicsCache: true,
-            httpProxy: proxyUrl.startsWith('http://') ? proxyUrl : null,
-            socksProxy: proxyUrl.startsWith('socks5://') ? proxyUrl : null,
+            ...proxyConfig
         })
 
         this.setupSteamUserEvents()
     }
 
-    private createCS2Instance() {
-        this.logger.debug(`Creating CS2 Instance for ${this.username}`)
+    private getProxyConfig() {
+        if (!this.config.proxyUrl) return {}
+
+        const proxyUrl = this.config.proxyUrl.replace(
+            '[session]',
+            `${this.config.username}_${this.sessionId}`
+        )
+
+        return {
+            httpProxy: proxyUrl.startsWith('http://') ? proxyUrl : null,
+            socksProxy: proxyUrl.startsWith('socks5://') ? proxyUrl : null
+        }
+    }
+
+    private setupSteamUserEvents(): void {
+        this.steamUser!.on('error', this.handleSteamError.bind(this))
+        this.steamUser!.on('disconnected', this.handleDisconnect.bind(this))
+        this.steamUser!.on('loggedOn', this.handleLoggedOn.bind(this))
+    }
+
+    private setupCS2Instance(): void {
+        if (!this.steamUser) throw new Error('Steam user not initialized')
+
         this.cs2Instance = new GlobalOffensive(this.steamUser)
-        this.setupCS2Events()
-    }
 
-    private setupSteamUserEvents() {
-        this.steamUser.on('error', (err) => {
-            if (err.eresult && this.loginErrors[err.eresult]) {
-                this.logger.error(`${this.username}: ${this.loginErrors[err.eresult]}`)
-            }
-            if (
-                err.toString().includes('Proxy connection timed out') ||
-                err.toString().includes('RateLimit') ||
-                err.toString().includes('Bad Gateway') ||
-                err.toString().includes('NetworkUnreachable') ||
-                err.toString().includes('ECONNREFUSED')
-            ) {
-                this.logger.debug(`${this.username}: Reconnecting with new session ${this.sessionCount}`)
-                this.initialize() // Reinitialize with incremented session
-            }
+        this.log('Initializing CS2 instance and attempting GC connection')
 
-            if (err.toString().includes('Account Disabled')) {
-                throw new Error('Account Disabled')
-            }
-
-            if (err.toString().includes('AccountLoginDeniedThrottle')) {
-                this.logger.error(`${this.username}: Account Login Denied Throttle`)
-                throw new Error('Account Login Denied Throttle')
-            }
-
-            console.log(err)
-        })
-
-        this.steamUser.on('disconnected', (eresult, msg) => {
-            this.logger.debug(`${this.username}: Logged off, reconnecting! (${eresult}, ${msg})`)
-            this.ready = false
-            this.initialize()
-        })
-
-        this.steamUser.on('loggedOn', () => {
-            this.logger.debug(`${this.username}: Log on OK`)
-            this.steamUser.gamesPlayed([], true)
-
-            this.steamUser.once('ownershipCached', () => {
-                if (!this.steamUser.ownsApp(730)) {
-                    this.logger.debug(`${this.username} doesn't own CS:GO, retrieving free license`)
-                    this.requestCS2License()
-                } else {
-                    this.logger.debug(`${this.username}: Initiating GC Connection`)
-                    this.steamUser.gamesPlayed([730], true)
-                }
-            })
-        })
-    }
-
-    private setupCS2Events() {
-        this.cs2Instance.on('inspectItemInfo', async (response) => {
-            this.busy = false
-            if (this.ttl) {
-                clearTimeout(this.ttl)
-                this.ttl = null
-            }
-            await this.onInspectResult(response)
-        })
-
+        this.cs2Instance.on('inspectItemInfo', this.handleInspectResult.bind(this))
         this.cs2Instance.on('connectedToGC', () => {
-            this.ready = true
-            this.logger.debug(`${this.username}: CS2 Client Ready!`)
+            this.log('Connected to GC')
+            this.status = BotStatus.READY
+            this.emit('ready')
         })
+        this.cs2Instance.on('disconnectedFromGC', this.handleGCDisconnect.bind(this))
 
-        this.cs2Instance.on('disconnectedFromGC', (reason) => {
-            this.ready = false
-            this.logger.debug(`${this.username}: CS2 unready (${reason}), trying to reconnect!`)
-            this.initialize()
-        })
-
-        this.cs2Instance.on('connectionStatus', (status) => {
-            this.logger.debug(`${this.username}: GC Connection Status Update ${status}`)
-        })
-
-        this.cs2Instance.on('debug', (msg) => {
-            if (process.env.GC_DEBUG === 'true') {
-                this.logger.debug(`${this.username}: ${msg}`)
-            }
+        this.cs2Instance.on('error', (error) => {
+            this.log(`CS2 instance error: ${error}`, true)
+            this.handleGCDisconnect()
         })
     }
 
-    private login() {
-        this.logger.debug(`Logging in ${this.username}`)
-        this.ready = false
+    private handleSteamError(error: any): void {
+        this.log(`Steam error: ${error.message}`, true)
 
-        this.steamUser.logOn({
-            accountName: this.username,
-            password: this.password,
-            rememberPassword: true,
-        })
+        if (this.shouldRetry(error)) {
+            this.retryInitialization()
+        } else {
+            this.status = BotStatus.ERROR
+            this.emit('error', this.mapError(error))
+        }
     }
 
-    private requestCS2License() {
-        this.steamUser.requestFreeLicense([730], (err, grantedPackages, grantedAppIDs) => {
-            this.logger.debug(`${this.username} Granted Packages`, grantedPackages)
-            this.logger.debug(`${this.username} Granted App IDs`, grantedAppIDs)
+    private shouldRetry(error: any): boolean {
+        const retryableErrors = [
+            'Proxy connection timed out',
+            'RateLimit',
+            'Bad Gateway',
+            'NetworkUnreachable',
+            'ECONNREFUSED'
+        ]
 
-            if (err) {
-                this.logger.error(`${this.username} Failed to obtain free CS:GO license`)
-            } else {
-                this.logger.debug(`${this.username}: Initiating GC Connection`)
-                this.steamUser.gamesPlayed([730], true)
-            }
-        })
+        return (
+            this.retryCount < this.config.maxRetries &&
+            retryableErrors.some(msg => error.message.includes(msg))
+        )
     }
 
-    public isReady(): boolean {
-        return this.ready && !this.busy && !this.onHold
+    private mapError(error: any): BotError {
+        if (error.message.includes('Invalid Password')) return BotError.INVALID_CREDENTIALS
+        if (error.message.includes('RateLimit')) return BotError.RATE_LIMITED
+        if (error.message.includes('Account Disabled')) return BotError.ACCOUNT_DISABLED
+        if (error.message.includes('NetworkUnreachable')) return BotError.CONNECTION_ERROR
+        return BotError.INITIALIZATION_ERROR
+    }
+
+    private async retryInitialization(): Promise<void> {
+        this.retryCount++
+        this.log(`Retrying initialization (attempt ${this.retryCount})`)
+        await this.initialize()
     }
 
     public async inspectItem(s: string, a: string, d: string): Promise<void> {
-        if (!this.isReady()) {
-            throw new Error('Bot is not ready')
+        if (!this.isAvailable()) {
+            throw new Error(`Bot is not ready (status: ${this.status})`)
         }
 
-        if (!this.cs2Instance.haveGCSession) {
-            this.logger.error(`Bot ${this.username} doesn't have a GC Session`)
-            throw new Error('No GC session')
-        }
+        this.status = BotStatus.BUSY
 
-        this.busy = true
+        return new Promise((resolve, reject) => {
+            this.currentInspectTimeout = setTimeout(() => {
+                this.handleInspectTimeout()
+                reject(new Error('Inspect timeout'))
+            }, this.config.inspectTimeout)
 
-        // Set timeout for inspection
-        this.ttl = setTimeout(() => {
-            this.logger.error(`${this.username} TTL exceeded for ${a}`)
-            this.busy = false
-            this.onHold = true
-
-            setTimeout(() => {
-                this.onHold = false
-            }, this.onHoldTimeout)
-
-            // throw new Error('Inspection timeout')
-        }, this.inspectTimeout)
-
-        this.cs2Instance.inspectItem(s !== '0' ? s : a, a, d)
+            try {
+                this.cs2Instance!.inspectItem(s !== '0' ? s : a, a, d)
+                resolve()
+            } catch (error) {
+                this.handleInspectError(error)
+                reject(error)
+            }
+        })
     }
 
-    public disconnect() {
-        if (this.steamUser) {
-            this.steamUser.logOff()
-            this.steamUser.removeAllListeners()
-        }
-        this.ready = false
-        this.busy = false
-        this.onHold = false
+    private handleInspectResult(result: any): void {
+        this.clearInspectTimeout()
+        this.status = BotStatus.READY
+        this.emit('inspectResult', result)
+    }
+
+    private handleInspectTimeout(): void {
+        this.status = BotStatus.COOLDOWN
+        this.clearInspectTimeout()
+
+        this.cooldownTimeout = setTimeout(() => {
+            this.status = BotStatus.READY
+        }, this.config.cooldownTime)
+    }
+
+    private handleInspectError(error: any): void {
+        this.log(`Inspect error: ${error.message}`, true)
+        this.clearInspectTimeout()
+        this.status = BotStatus.ERROR
     }
 
     public async destroy(): Promise<void> {
-        try {
-            // Clear any intervals
-            if (this.interval) {
-                clearInterval(this.interval)
-                this.interval = null
-            }
+        this.cleanup()
 
-            // Logout and disconnect from Steam
-            if (this.client) {
-                await new Promise<void>((resolve) => {
-                    this.client.logOff()
-                    this.client.once('disconnected', () => {
-                        resolve()
-                    })
-
-                    // Fallback timeout in case disconnect event doesn't fire
-                    setTimeout(resolve, 5000)
+        if (this.steamUser) {
+            return new Promise<void>((resolve) => {
+                this.steamUser!.once('disconnected', () => {
+                    this.status = BotStatus.DISCONNECTED
+                    resolve()
                 })
-            }
 
-            // Reset state
-            this.ready = false
-            this.client = null
+                this.steamUser!.logOff()
 
-        } catch (error) {
-            console.error(`Error destroying bot: ${error.message}`)
-            throw error
+                // Fallback timeout
+                setTimeout(resolve, 5000)
+            })
         }
+    }
+
+    private cleanup(): void {
+        this.clearInspectTimeout()
+        this.clearInitializationTimeout()
+        this.clearCooldownTimeout()
+
+        if (this.steamUser) {
+            this.steamUser.removeAllListeners()
+            this.steamUser = null
+        }
+
+        if (this.cs2Instance) {
+            this.cs2Instance.removeAllListeners()
+            this.cs2Instance = null
+        }
+    }
+
+    private clearInspectTimeout(): void {
+        if (this.currentInspectTimeout) {
+            clearTimeout(this.currentInspectTimeout)
+            this.currentInspectTimeout = null
+        }
+    }
+
+    private clearInitializationTimeout(): void {
+        if (this.initializationTimeout) {
+            clearTimeout(this.initializationTimeout)
+            this.initializationTimeout = null
+        }
+    }
+
+    private clearCooldownTimeout(): void {
+        if (this.cooldownTimeout) {
+            clearTimeout(this.cooldownTimeout)
+            this.cooldownTimeout = null
+        }
+    }
+
+    private log(message: string, isError = false): void {
+        if (this.config.debug || isError) {
+            const logFn = isError ? this.logger.error : this.logger.debug
+            logFn.call(this.logger, `[${this.config.username}] ${message}`)
+        }
+    }
+
+    private handleInitializationError(error: any): void {
+        this.log(`Initialization error: ${error.message}`, true)
+        this.cleanup()
+        this.status = BotStatus.ERROR
+        this.emit('error', this.mapError(error))
+    }
+
+    private handleDisconnect(): void {
+        this.log('Disconnected from Steam')
+        this.status = BotStatus.DISCONNECTED
+        this.cleanup()
+    }
+
+    private handleLoggedOn(): void {
+        this.log('Logged into Steam')
+
+        if (this.steamUser) {
+            this.log('Setting game played to CS2')
+            this.steamUser.gamesPlayed([730])
+        }
+    }
+
+    private handleGCDisconnect(): void {
+        this.log('Disconnected from GC', true)
+        this.status = BotStatus.ERROR
+
+        if (this.shouldRetry({ message: 'GC_DISCONNECT' })) {
+            this.log('Attempting to reconnect to GC...')
+            if (this.steamUser) {
+                this.steamUser.gamesPlayed([730])
+            }
+        } else {
+            this.emit('error', BotError.GC_ERROR)
+        }
+    }
+
+    private login(): void {
+        this.steamUser!.logOn({
+            accountName: this.config.username,
+            password: this.config.password
+        })
     }
 }
