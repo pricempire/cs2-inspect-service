@@ -197,9 +197,9 @@ export class Bot extends EventEmitter {
     }
 
     private mapError(error: any): BotError {
-        if (error.message.includes('Invalid Password')) return BotError.INVALID_CREDENTIALS
+        if (error.message.includes('InvalidPassword')) return BotError.INVALID_CREDENTIALS
         if (error.message.includes('RateLimit')) return BotError.RATE_LIMITED
-        if (error.message.includes('Account Disabled')) return BotError.ACCOUNT_DISABLED
+        if (error.message.includes('AccountDisabled')) return BotError.ACCOUNT_DISABLED
         if (error.message.includes('NetworkUnreachable')) return BotError.CONNECTION_ERROR
         return BotError.INITIALIZATION_ERROR
     }

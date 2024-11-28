@@ -142,7 +142,7 @@ export class InspectService implements OnModuleInit {
                         initialized = true;
 
                     } catch (error) {
-                        if (error.message.toString().includes('Initialization timeout')) {
+                        if (error.message === 'INITIALIZATION_ERROR') {
                             retryCount++;
                             this.logger.warn(`Initialization timeout for bot ${username}. Retrying...`);
                             if (retryCount >= MAX_RETRIES) {
