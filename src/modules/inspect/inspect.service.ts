@@ -30,7 +30,7 @@ export class InspectService implements OnModuleInit {
     private nextBot = 0
     private currentRequests = 0
     private requests: number[] = []
-    private minBots = 200;
+    private minBots = 80;
     private botsToAddWhenNeeded = 20 // Reduced from 50 to maintain better control
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
@@ -67,12 +67,6 @@ export class InspectService implements OnModuleInit {
     private isScaling = false;
     private targetBotCount = this.MIN_BOTS;
 
-    // Add these new properties
-    private blacklistedBots: Map<string, number> = new Map();
-    private readonly BOT_BLACKLIST_DURATION = 5 * 60 * 1000; // 5 minutes cooldown
-    private readonly MAX_INIT_ATTEMPTS = 3; // Maximum initialization attempts
-    private botInitAttempts: Map<string, number> = new Map();
-
     constructor(
         private parseService: ParseService,
         private formatService: FormatService,
@@ -89,73 +83,36 @@ export class InspectService implements OnModuleInit {
         this.accounts = await this.loadAccounts()
 
         // Initialize bots in batches
-        this.initializeInitialBots();
+        await this.initializeInitialBots();
     }
 
     /**
      * Initialize initial set of bots in batches
      */
     private async initializeInitialBots() {
-        const CONCURRENT_INIT = 10; // Number of bots to initialize concurrently
-        const BATCH_DELAY = 500;    // Delay between batches in ms
+        const initializeBatch = async (startIndex: number, count: number) => {
+            const endIndex = Math.min(startIndex + count, this.accounts.length);
+            const promises = [];
 
-        let currentIndex = 0;
-        const existingBotUsernames = new Set(this.bots.keys());
-
-        while (this.bots.size < this.MIN_BOTS && currentIndex < this.accounts.length) {
-            // Create a batch of concurrent initialization promises
-            const initPromises = [];
-            const batchUsernames = [];
-
-            for (let i = 0; i < CONCURRENT_INIT && currentIndex < this.accounts.length; i++) {
-                const [username, password] = this.accounts[currentIndex].split(':');
-
-                // Skip already initialized bots
-                if (existingBotUsernames.has(username)) {
-                    currentIndex++;
-                    continue;
-                }
-
-                batchUsernames.push(username);
-                initPromises.push(
-                    this.initializeBot(username, password)
-                        .catch(error => {
-                            this.logger.error(`Failed to initialize bot ${username}: ${error.message}`);
-                            return false;
-                        })
-                );
-
-                currentIndex++;
+            for (let i = startIndex; i < endIndex; i++) {
+                const [username, password] = this.accounts[i].split(':');
+                promises.push(this.initializeBot(username, password));
+                // Small delay between each bot in the batch
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
 
-            // If no new bots to initialize in this batch, continue
-            if (initPromises.length === 0) {
-                continue;
-            }
+            await Promise.allSettled(promises);
+        };
 
-            // Wait for current batch to complete
-            const results = await Promise.all(initPromises);
-
-            // Log progress
-            this.logger.debug(`Initialized ${this.bots.size}/${this.MIN_BOTS} bots`);
-
-            // Break if we've reached our target
-            if (this.bots.size >= this.MIN_BOTS) {
-                break;
-            }
-
-            // Add delay between batches to prevent rate limiting
-            await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+        // Initialize bots in batches
+        for (let i = 0; i < this.MIN_BOTS; i += this.INIT_BATCH_SIZE) {
+            await initializeBatch(i, this.INIT_BATCH_SIZE);
+            // Delay between batches
+            await new Promise(resolve => setTimeout(resolve, 2000));
         }
 
         // Start monitoring readiness
         this.monitorBotsReadiness();
-
-        if (this.bots.size < this.MIN_BOTS) {
-            this.logger.warn(`Only initialized ${this.bots.size}/${this.MIN_BOTS} minimum required bots`);
-        }
-
-        return this.bots.size;
     }
 
     /**
@@ -422,68 +379,20 @@ export class InspectService implements OnModuleInit {
      * @param password 
      */
     private async initializeBot(username: string, password: string) {
-        // Check if bot is blacklisted
-        const blacklistedUntil = this.blacklistedBots.get(username);
-        if (blacklistedUntil && Date.now() < blacklistedUntil) {
-            this.logger.debug(`Bot ${username} is blacklisted for ${Math.ceil((blacklistedUntil - Date.now()) / 1000)}s`);
-            return false;
-        }
-
-        // Check initialization attempts
-        const attempts = this.botInitAttempts.get(username) || 0;
-        if (attempts >= this.MAX_INIT_ATTEMPTS) {
-            this.logger.warn(`Bot ${username} exceeded maximum initialization attempts`);
-            return false;
-        }
-
         try {
             const bot = new Bot(
                 username,
                 password,
                 process.env.PROXY_URL,
                 (response) => this.handleInspectResult(username, response)
-            );
+            )
 
-            // Wait for full initialization
-            await bot.initialize();
-
-            // Only add bot to active bots if initialization was successful
-            this.bots.set(username, bot);
-            this.botLastUsedTime.set(username, Date.now());
-            this.logger.debug(`Bot ${username} initialized successfully`);
-
-            // Reset attempts on successful initialization
-            this.botInitAttempts.delete(username);
-            this.blacklistedBots.delete(username);
-
-            return true;
+            await bot.initialize()
+            this.bots.set(username, bot)
+            this.botLastUsedTime.set(username, Date.now())
+            this.logger.debug(`Bot ${username} initialized successfully`)
         } catch (error) {
-            // Categorize errors for different handling
-            const errorMessage = error.message || 'Unknown error';
-
-            // Increment attempt counter
-            this.botInitAttempts.set(username, attempts + 1);
-
-            // Different blacklist durations based on error type
-            let blacklistDuration = this.BOT_BLACKLIST_DURATION;
-
-            if (errorMessage.includes('Account Login Denied Throttle')) {
-                blacklistDuration = this.BOT_BLACKLIST_DURATION * 4; // Longer timeout for login throttle
-            } else if (errorMessage.includes('Invalid Password')) {
-                blacklistDuration = this.BOT_BLACKLIST_DURATION * 2; // Medium timeout for auth issues
-            } else if (errorMessage.includes('Account Disabled')) {
-                blacklistDuration = this.BOT_BLACKLIST_DURATION * 100000; // Long timeout for account disabled
-            }
-
-            // If max attempts reached, blacklist the bot
-            if (attempts + 1 >= this.MAX_INIT_ATTEMPTS) {
-                const blacklistUntil = Date.now() + blacklistDuration;
-                this.blacklistedBots.set(username, blacklistUntil);
-                this.logger.warn(`Bot ${username} blacklisted until ${new Date(blacklistUntil).toISOString()} (Error: ${errorMessage})`);
-            }
-
-            this.logger.error(`Failed to initialize bot ${username}: ${errorMessage}`);
-            return false;
+            this.logger.error(`Failed to initialize bot ${username}: ${error.message}`)
         }
     }
 
@@ -522,11 +431,10 @@ export class InspectService implements OnModuleInit {
                 if (nextAccountIndex >= this.accounts.length) break
 
                 const [username, password] = this.accounts[nextAccountIndex].split(':')
-                if (await this.initializeBot(username, password)) {
-                    await new Promise(resolve => setTimeout(resolve, this.BOT_INIT_DELAY))
-                    const newBot = this.bots.get(username)
-                    if (newBot) newBots.push(newBot)
-                }
+                await this.initializeBot(username, password)
+                await new Promise(resolve => setTimeout(resolve, this.BOT_INIT_DELAY))
+                const newBot = this.bots.get(username)
+                if (newBot) newBots.push(newBot)
             }
 
             return newBots.filter(bot => bot?.isReady())
@@ -725,8 +633,15 @@ export class InspectService implements OnModuleInit {
      * @param uniqueId 
      */
     private async saveHistory(response: any, history: any, inspectData: any, uniqueId: string) {
-        try {
-            await this.historyRepository.upsert({
+        const existing = await this.historyRepository.findOne({
+            where: {
+                assetId: parseInt(response.itemid),
+            },
+        })
+
+        if (!existing) {
+
+            await this.historyRepository.save({
                 uniqueId,
                 assetId: parseInt(response.itemid),
                 prevAssetId: history?.assetId,
@@ -738,12 +653,7 @@ export class InspectService implements OnModuleInit {
                 prevStickers: history?.stickers,
                 prevKeychains: history?.keychains,
                 type: this.getHistoryType(response, history, inspectData),
-            }, {
-                conflictPaths: ['assetId', 'uniqueId'],  // Specify both fields for the conflict constraint
-                skipUpdateIfNoValuesChanged: true
             })
-        } catch (error) {
-            this.logger.warn(`Failed to save history for asset ${response.itemid}: ${error.message}`)
         }
     }
 
@@ -1017,21 +927,6 @@ export class InspectService implements OnModuleInit {
                 await bot.destroy();
                 this.bots.delete(username);
                 this.botLastUsedTime.delete(username);
-            }
-        }
-    }
-
-    /**
-     * Cleanup blacklisted bots
-     */
-    @Cron('* * * * *') // Run every minute
-    private cleanupBlacklist() {
-        const now = Date.now();
-        for (const [username, blacklistedUntil] of this.blacklistedBots.entries()) {
-            if (now >= blacklistedUntil) {
-                this.blacklistedBots.delete(username);
-                this.botInitAttempts.delete(username);
-                this.logger.debug(`Removed ${username} from blacklist`);
             }
         }
     }
