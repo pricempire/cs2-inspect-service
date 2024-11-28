@@ -50,7 +50,7 @@ export class Bot extends EventEmitter {
     constructor(config: BotConfig) {
         super()
         this.config = {
-            initTimeout: 20000,
+            initTimeout: 60000,
             inspectTimeout: 5000,
             cooldownTime: 60000,
             maxRetries: 3,
