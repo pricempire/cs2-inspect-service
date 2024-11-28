@@ -34,7 +34,6 @@ export class InspectService implements OnModuleInit {
     private botsToAddWhenNeeded = 20 // Reduced from 50 to maintain better control
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
-    private readonly BOT_INIT_DELAY = 500; // 5 seconds delay between bot initializations
 
     private success = 0
     private cached = 0
@@ -101,8 +100,6 @@ export class InspectService implements OnModuleInit {
                     if (success) {
                         results.push(success);
                     }
-                    // Small delay between each bot in the batch
-                    await new Promise(resolve => setTimeout(resolve, 100));
                 } catch (error) {
                     this.logger.error(`Failed to initialize bot at index ${i}: ${error.message}`);
                     // Continue with next bot instead of failing the entire batch
@@ -462,7 +459,6 @@ export class InspectService implements OnModuleInit {
 
                 const [username, password] = this.accounts[nextAccountIndex].split(':')
                 if (await this.initializeBot(username, password)) {
-                    await new Promise(resolve => setTimeout(resolve, this.BOT_INIT_DELAY))
                     const newBot = this.bots.get(username)
                     if (newBot) newBots.push(newBot)
                 }
