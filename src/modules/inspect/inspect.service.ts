@@ -34,6 +34,7 @@ export class InspectService implements OnModuleInit {
     private botsToAddWhenNeeded = 20 // Reduced from 50 to maintain better control
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
+    private readonly BOT_INIT_DELAY = 500; // 5 seconds delay between bot initializations
 
     private success = 0
     private cached = 0
@@ -65,6 +66,12 @@ export class InspectService implements OnModuleInit {
     private lastScaleOperation = 0;
     private isScaling = false;
     private targetBotCount = this.MIN_BOTS;
+
+    // Add these new properties
+    private blacklistedBots: Map<string, number> = new Map();
+    private readonly BOT_BLACKLIST_DURATION = 5 * 60 * 1000; // 5 minutes cooldown
+    private readonly MAX_INIT_ATTEMPTS = 3; // Maximum initialization attempts
+    private botInitAttempts: Map<string, number> = new Map();
 
     constructor(
         private parseService: ParseService,
@@ -100,6 +107,8 @@ export class InspectService implements OnModuleInit {
                     if (success) {
                         results.push(success);
                     }
+                    // Small delay between each bot in the batch
+                    await new Promise(resolve => setTimeout(resolve, 100));
                 } catch (error) {
                     this.logger.error(`Failed to initialize bot at index ${i}: ${error.message}`);
                     // Continue with next bot instead of failing the entire batch
@@ -403,24 +412,69 @@ export class InspectService implements OnModuleInit {
      * @param password 
      */
     private async initializeBot(username: string, password: string) {
+        // Check if bot is blacklisted
+        const blacklistedUntil = this.blacklistedBots.get(username);
+        if (blacklistedUntil && Date.now() < blacklistedUntil) {
+            this.logger.debug(`Bot ${username} is blacklisted for ${Math.ceil((blacklistedUntil - Date.now()) / 1000)}s`);
+            return false;
+        }
+
+        // Check initialization attempts
+        const attempts = this.botInitAttempts.get(username) || 0;
+        if (attempts >= this.MAX_INIT_ATTEMPTS) {
+            this.logger.warn(`Bot ${username} exceeded maximum initialization attempts`);
+            return false;
+        }
+
         try {
             const bot = new Bot(
                 username,
                 password,
                 process.env.PROXY_URL,
                 (response) => this.handleInspectResult(username, response)
-            )
+            );
 
-            await bot.initialize()
-            this.bots.set(username, bot)
-            this.botLastUsedTime.set(username, Date.now())
-            this.logger.debug(`Bot ${username} initialized successfully`)
+            // Wait for full initialization
+            await bot.initialize();
+
+            // Only add bot to active bots if initialization was successful
+            this.bots.set(username, bot);
+            this.botLastUsedTime.set(username, Date.now());
+            this.logger.debug(`Bot ${username} initialized successfully`);
+
+            // Reset attempts on successful initialization
+            this.botInitAttempts.delete(username);
+            this.blacklistedBots.delete(username);
+
+            return true;
         } catch (error) {
-            this.logger.error(`Failed to initialize bot ${username}: ${error.message}`)
+            // Categorize errors for different handling
+            const errorMessage = error.message || 'Unknown error';
+
+            // Increment attempt counter
+            this.botInitAttempts.set(username, attempts + 1);
+
+            // Different blacklist durations based on error type
+            let blacklistDuration = this.BOT_BLACKLIST_DURATION;
+
+            if (errorMessage.includes('Account Login Denied Throttle')) {
+                blacklistDuration = this.BOT_BLACKLIST_DURATION * 4; // Longer timeout for login throttle
+            } else if (errorMessage.includes('Invalid Password')) {
+                blacklistDuration = this.BOT_BLACKLIST_DURATION * 2; // Medium timeout for auth issues
+            } else if (errorMessage.includes('Account Disabled')) {
+                blacklistDuration = this.BOT_BLACKLIST_DURATION * 100000; // Long timeout for account disabled
+            }
+
+            // If max attempts reached, blacklist the bot
+            if (attempts + 1 >= this.MAX_INIT_ATTEMPTS) {
+                const blacklistUntil = Date.now() + blacklistDuration;
+                this.blacklistedBots.set(username, blacklistUntil);
+                this.logger.warn(`Bot ${username} blacklisted until ${new Date(blacklistUntil).toISOString()} (Error: ${errorMessage})`);
+            }
+
+            this.logger.error(`Failed to initialize bot ${username}: ${errorMessage}`);
             return false;
         }
-
-        return true;
     }
 
     /**
@@ -459,6 +513,7 @@ export class InspectService implements OnModuleInit {
 
                 const [username, password] = this.accounts[nextAccountIndex].split(':')
                 if (await this.initializeBot(username, password)) {
+                    await new Promise(resolve => setTimeout(resolve, this.BOT_INIT_DELAY))
                     const newBot = this.bots.get(username)
                     if (newBot) newBots.push(newBot)
                 }
@@ -952,6 +1007,21 @@ export class InspectService implements OnModuleInit {
                 await bot.destroy();
                 this.bots.delete(username);
                 this.botLastUsedTime.delete(username);
+            }
+        }
+    }
+
+    /**
+     * Cleanup blacklisted bots
+     */
+    @Cron('* * * * *') // Run every minute
+    private cleanupBlacklist() {
+        const now = Date.now();
+        for (const [username, blacklistedUntil] of this.blacklistedBots.entries()) {
+            if (now >= blacklistedUntil) {
+                this.blacklistedBots.delete(username);
+                this.botInitAttempts.delete(username);
+                this.logger.debug(`Removed ${username} from blacklist`);
             }
         }
     }

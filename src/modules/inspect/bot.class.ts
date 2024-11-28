@@ -31,9 +31,65 @@ export class Bot {
     ) { }
 
     async initialize() {
-        this.createSteamUser()
-        this.createCS2Instance()
-        this.login()
+        return new Promise((resolve, reject) => {
+            // Set a timeout for the entire initialization process
+            const initTimeout = setTimeout(() => {
+                reject(new Error('Initialization timeout'));
+            }, 30000); // 30 second timeout
+
+            // Track required events for successful initialization
+            let loggedOn = false;
+            let gcConnected = false;
+
+            const checkInitComplete = () => {
+                if (loggedOn && gcConnected) {
+                    clearTimeout(initTimeout);
+                    resolve(true);
+                }
+            };
+
+            this.createSteamUser();
+            this.createCS2Instance();
+
+            // Add initialization-specific event handlers
+            const initHandlers = {
+                error: (err) => {
+                    clearTimeout(initTimeout);
+                    reject(err);
+                },
+                loggedOn: () => {
+                    loggedOn = true;
+                    checkInitComplete();
+                }
+            };
+
+            // Add GC-specific event handlers
+            this.cs2Instance.once('connectedToGC', () => {
+                gcConnected = true;
+                checkInitComplete();
+            });
+
+            // Add error handlers for initialization period
+            this.steamUser.once('error', initHandlers.error);
+            this.steamUser.once('loggedOn', initHandlers.loggedOn);
+
+            // Start login process
+            this.login();
+
+            // Cleanup function to remove temporary handlers if initialization fails
+            const cleanup = () => {
+                this.steamUser.removeListener('error', initHandlers.error);
+                this.steamUser.removeListener('loggedOn', initHandlers.loggedOn);
+            };
+
+            // Add cleanup to both success and failure paths
+            Promise.race([
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Init timeout')), 30000))
+            ]).catch(error => {
+                cleanup();
+                reject(error);
+            });
+        });
     }
 
     private createSteamUser() {
@@ -81,6 +137,7 @@ export class Bot {
             }
 
             if (err.toString().includes('Account Disabled')) {
+                throw new Error('Account Disabled')
             }
 
             if (err.toString().includes('AccountLoginDeniedThrottle')) {
