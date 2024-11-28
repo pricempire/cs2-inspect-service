@@ -61,7 +61,7 @@ export class InspectService implements OnModuleInit {
     async onModuleInit() {
         this.logger.debug('Starting Inspect Module...')
         this.accounts = await this.loadAccounts()
-        await this.initializeAllBots()
+        this.initializeAllBots()
     }
 
     private async loadAccounts(): Promise<string[]> {
@@ -112,32 +112,54 @@ export class InspectService implements OnModuleInit {
     }
 
     private async initializeAllBots() {
-        const initPromises = this.accounts.map(async (account) => {
-            const [username, password] = account.split(':')
-            try {
-                const bot = new Bot({
-                    username,
-                    password,
-                    proxyUrl: process.env.PROXY_URL,
-                    debug: true // process.env.NODE_ENV === 'development'
-                })
+        const BATCH_SIZE = 50;
+        const MAX_RETRIES = 3;
 
-                bot.on('inspectResult', (response) => this.handleInspectResult(username, response))
-                bot.on('error', (error) => {
-                    this.logger.error(`Bot ${username} error: ${error}`)
-                })
+        for (let i = 0; i < this.accounts.length; i += BATCH_SIZE) {
+            const batch = this.accounts.slice(i, i + BATCH_SIZE);
+            const initPromises = batch.map(async (account) => {
+                const [username, password] = account.split(':');
+                let retryCount = 0;
+                let initialized = false;
 
-                await bot.initialize()
-                this.bots.set(username, bot)
-                this.logger.debug(`Bot ${username} initialized successfully`)
+                while (retryCount < MAX_RETRIES && !initialized) {
+                    try {
+                        const bot = new Bot({
+                            username,
+                            password,
+                            proxyUrl: process.env.PROXY_URL,
+                            debug: true
+                        });
 
-            } catch (error) {
-                this.logger.error(`Failed to initialize bot ${username}: ${error.message}`)
-            }
-        })
+                        bot.on('inspectResult', (response) => this.handleInspectResult(username, response));
+                        bot.on('error', (error) => {
+                            this.logger.error(`Bot ${username} error: ${error}`);
+                        });
 
-        await Promise.allSettled(initPromises)
-        this.logger.debug(`Initialized ${this.bots.size} bots`)
+                        await bot.initialize();
+                        this.bots.set(username, bot);
+                        this.logger.debug(`Bot ${username} initialized successfully`);
+                        initialized = true;
+
+                    } catch (error) {
+                        if (error.message.toString().includes('Initialization timeout')) {
+                            retryCount++;
+                            this.logger.warn(`Initialization timeout for bot ${username}. Retrying...`);
+                            if (retryCount >= MAX_RETRIES) {
+                                this.logger.error(`Max retries reached for bot ${username}. Initialization failed.`);
+                            }
+                        } else {
+                            this.logger.error(`Failed to initialize bot ${username}: ${error.message}`);
+                        }
+                    }
+                }
+            });
+
+            await Promise.allSettled(initPromises);
+            this.logger.debug(`Initialized batch of ${batch.length} bots (${i + batch.length}/${this.accounts.length} total)`);
+        }
+
+        this.logger.debug(`Finished initializing ${this.bots.size} bots`);
     }
 
     public stats() {
