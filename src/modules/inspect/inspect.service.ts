@@ -89,65 +89,62 @@ export class InspectService implements OnModuleInit {
         this.accounts = await this.loadAccounts()
 
         // Initialize bots in batches
-        this.initializeInitialBots();
+        await this.initializeInitialBots();
     }
 
     /**
      * Initialize initial set of bots in batches
      */
     private async initializeInitialBots() {
-        const initializeBatch = async (startIndex: number, count: number) => {
-            const endIndex = Math.min(startIndex + count, this.accounts.length);
-            const initPromises = [];
-
-            for (let i = startIndex; i < endIndex; i++) {
-                const initPromise = (async () => {
-                    try {
-                        const [username, password] = this.accounts[i].split(':');
-                        const success = await this.initializeBot(username, password);
-                        return success;
-                    } catch (error) {
-                        this.logger.error(`Failed to initialize bot at index ${i}: ${error.message}`);
-                        return false;
-                    }
-                })();
-                initPromises.push(initPromise);
-
-                // Add small delay between starting each initialization
-                // to prevent overwhelming the system
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-
-            const results = await Promise.all(initPromises);
-            return results.filter(Boolean);
-        };
+        const CONCURRENT_INIT = 10; // Number of bots to initialize concurrently
+        const BATCH_DELAY = 500;    // Delay between batches in ms
 
         let initializedCount = 0;
-        // Initialize bots in parallel batches
-        for (let i = 0; i < this.MIN_BOTS; i += this.INIT_BATCH_SIZE) {
-            try {
-                const batchResults = await initializeBatch(i, this.INIT_BATCH_SIZE);
-                initializedCount += batchResults.length;
+        let currentIndex = 0;
 
-                // Check if we have enough bots initialized
-                if (initializedCount >= this.MIN_BOTS) {
-                    break;
-                }
+        while (initializedCount < this.MIN_BOTS && currentIndex < this.accounts.length) {
+            // Create a batch of concurrent initialization promises
+            const initPromises = [];
 
-                // Delay between batches
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            } catch (error) {
-                this.logger.error(`Failed to initialize batch starting at index ${i}: ${error.message}`);
-                continue;
+            for (let i = 0; i < CONCURRENT_INIT && currentIndex < this.accounts.length; i++) {
+                const [username, password] = this.accounts[currentIndex].split(':');
+
+                // Add initialization promise to batch
+                initPromises.push(
+                    this.initializeBot(username, password)
+                        .catch(error => {
+                            this.logger.error(`Failed to initialize bot ${username}: ${error.message}`);
+                            return false;
+                        })
+                );
+
+                currentIndex++;
             }
+
+            // Wait for current batch to complete
+            const results = await Promise.all(initPromises);
+            initializedCount += results.filter(Boolean).length;
+
+            // Log progress
+            this.logger.debug(`Initialized ${initializedCount}/${this.MIN_BOTS} bots`);
+
+            // Break if we've reached our target
+            if (initializedCount >= this.MIN_BOTS) {
+                break;
+            }
+
+            // Add delay between batches to prevent rate limiting
+            await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
         }
 
-        // Start monitoring readiness even if we didn't reach MIN_BOTS
+        // Start monitoring readiness
         this.monitorBotsReadiness();
 
         if (initializedCount < this.MIN_BOTS) {
             this.logger.warn(`Only initialized ${initializedCount}/${this.MIN_BOTS} minimum required bots`);
         }
+
+        return initializedCount;
     }
 
     /**
