@@ -99,17 +99,24 @@ export class InspectService implements OnModuleInit {
         const CONCURRENT_INIT = 10; // Number of bots to initialize concurrently
         const BATCH_DELAY = 500;    // Delay between batches in ms
 
-        let initializedCount = 0;
         let currentIndex = 0;
+        const existingBotUsernames = new Set(this.bots.keys());
 
-        while (initializedCount < this.MIN_BOTS && currentIndex < this.accounts.length) {
+        while (this.bots.size < this.MIN_BOTS && currentIndex < this.accounts.length) {
             // Create a batch of concurrent initialization promises
             const initPromises = [];
+            const batchUsernames = [];
 
             for (let i = 0; i < CONCURRENT_INIT && currentIndex < this.accounts.length; i++) {
                 const [username, password] = this.accounts[currentIndex].split(':');
 
-                // Add initialization promise to batch
+                // Skip already initialized bots
+                if (existingBotUsernames.has(username)) {
+                    currentIndex++;
+                    continue;
+                }
+
+                batchUsernames.push(username);
                 initPromises.push(
                     this.initializeBot(username, password)
                         .catch(error => {
@@ -121,15 +128,19 @@ export class InspectService implements OnModuleInit {
                 currentIndex++;
             }
 
+            // If no new bots to initialize in this batch, continue
+            if (initPromises.length === 0) {
+                continue;
+            }
+
             // Wait for current batch to complete
             const results = await Promise.all(initPromises);
-            initializedCount += results.filter(Boolean).length;
 
             // Log progress
-            this.logger.debug(`Initialized ${initializedCount}/${this.MIN_BOTS} bots`);
+            this.logger.debug(`Initialized ${this.bots.size}/${this.MIN_BOTS} bots`);
 
             // Break if we've reached our target
-            if (initializedCount >= this.MIN_BOTS) {
+            if (this.bots.size >= this.MIN_BOTS) {
                 break;
             }
 
@@ -140,11 +151,11 @@ export class InspectService implements OnModuleInit {
         // Start monitoring readiness
         this.monitorBotsReadiness();
 
-        if (initializedCount < this.MIN_BOTS) {
-            this.logger.warn(`Only initialized ${initializedCount}/${this.MIN_BOTS} minimum required bots`);
+        if (this.bots.size < this.MIN_BOTS) {
+            this.logger.warn(`Only initialized ${this.bots.size}/${this.MIN_BOTS} minimum required bots`);
         }
 
-        return initializedCount;
+        return this.bots.size;
     }
 
     /**
