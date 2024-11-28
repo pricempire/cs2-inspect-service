@@ -33,7 +33,7 @@ export class Bot {
     async initialize() {
         this.createSteamUser()
         this.createCS2Instance()
-        await this.login()
+        this.login()
     }
 
     private createSteamUser() {
@@ -145,7 +145,7 @@ export class Bot {
         })
     }
 
-    private async login() {
+    private login() {
         this.logger.debug(`Logging in ${this.username}`)
         this.ready = false
 

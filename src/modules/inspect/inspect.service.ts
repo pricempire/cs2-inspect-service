@@ -30,7 +30,7 @@ export class InspectService implements OnModuleInit {
     private nextBot = 0
     private currentRequests = 0
     private requests: number[] = []
-    private minBots = 450;
+    private minBots = 80;
     private botsToAddWhenNeeded = 20 // Reduced from 50 to maintain better control
     private botLastUsedTime: Map<string, number> = new Map() // Track last usage time
     private readonly BOT_INACTIVE_THRESHOLD = 15 * 60 * 1000 // 15 minutes in milliseconds
@@ -92,27 +92,54 @@ export class InspectService implements OnModuleInit {
     private async initializeInitialBots() {
         const initializeBatch = async (startIndex: number, count: number) => {
             const endIndex = Math.min(startIndex + count, this.accounts.length);
-            const promises = [];
+            const results = [];
 
             for (let i = startIndex; i < endIndex; i++) {
-                const [username, password] = this.accounts[i].split(':');
-                promises.push(this.initializeBot(username, password));
-                // Small delay between each bot in the batch
-                await new Promise(resolve => setTimeout(resolve, 100));
+                try {
+                    const [username, password] = this.accounts[i].split(':');
+                    const success = await this.initializeBot(username, password);
+                    if (success) {
+                        results.push(success);
+                    }
+                    // Small delay between each bot in the batch
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                } catch (error) {
+                    this.logger.error(`Failed to initialize bot at index ${i}: ${error.message}`);
+                    // Continue with next bot instead of failing the entire batch
+                    continue;
+                }
             }
 
-            await Promise.allSettled(promises);
+            return results;
         };
 
+        let initializedCount = 0;
         // Initialize bots in batches
         for (let i = 0; i < this.MIN_BOTS; i += this.INIT_BATCH_SIZE) {
-            await initializeBatch(i, this.INIT_BATCH_SIZE);
-            // Delay between batches
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            try {
+                const batchResults = await initializeBatch(i, this.INIT_BATCH_SIZE);
+                initializedCount += batchResults.filter(Boolean).length;
+
+                // Check if we have enough bots initialized
+                if (initializedCount >= this.MIN_BOTS) {
+                    break;
+                }
+
+                // Delay between batches
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            } catch (error) {
+                this.logger.error(`Failed to initialize batch starting at index ${i}: ${error.message}`);
+                // Continue with next batch instead of failing entirely
+                continue;
+            }
         }
 
-        // Start monitoring readiness
+        // Start monitoring readiness even if we didn't reach MIN_BOTS
         this.monitorBotsReadiness();
+
+        if (initializedCount < this.MIN_BOTS) {
+            this.logger.warn(`Only initialized ${initializedCount}/${this.MIN_BOTS} minimum required bots`);
+        }
     }
 
     /**
@@ -855,7 +882,7 @@ export class InspectService implements OnModuleInit {
         return this.bots.size * 2; // Fallback to initial bot count if no bots yet
     }
 
-    // @Cron('*/15 * * * * *') // Run every 15 seconds
+    @Cron('*/15 * * * * *') // Run every 15 seconds
     private async adjustBotCount() {
         if (this.isScaling || Date.now() - this.lastScaleOperation < this.SCALE_COOLDOWN) {
             return;
