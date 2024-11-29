@@ -204,6 +204,13 @@ export class InspectService implements OnModuleInit {
             ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length
             : 0
 
+        // Get queue details
+        const queueItems = Array.from(this.inspects.entries()).map(([assetId, inspect]) => ({
+            assetId,
+            elapsedTime: inspect.startTime ? Date.now() - inspect.startTime : 0,
+            retryCount: inspect.retryCount || 0
+        }));
+
         return {
             status: this.bots.size > 0 ? 'ready' : 'initializing',
             uptime: {
@@ -223,7 +230,8 @@ export class InspectService implements OnModuleInit {
                 current: this.inspects.size,
                 max: this.MAX_QUEUE_SIZE,
                 utilization: queueUtilization.toFixed(2) + '%',
-                avgProcessingTime: Math.round(avgProcessingTime) + 'ms'
+                avgProcessingTime: Math.round(avgProcessingTime) + 'ms',
+                items: queueItems
             },
             metrics: {
                 success: {
