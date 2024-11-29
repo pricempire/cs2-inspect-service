@@ -366,11 +366,25 @@ export class InspectService implements OnModuleInit {
             return null
         }
 
-        // Round-robin selection
-        const [_, bot] = readyBots[this.nextBot % readyBots.length]
-        this.nextBot = (this.nextBot + 1) % readyBots.length
+        // Get the next available bot using the total number of bots
+        const startIndex = this.nextBot
+        let attempts = 0
 
-        return bot
+        // Try finding an available bot, starting from the next position
+        while (attempts < this.bots.size) {
+            const currentIndex = (startIndex + attempts) % this.bots.size
+            const bot = Array.from(this.bots.values())[currentIndex]
+
+            if (bot && bot.isAvailable()) {
+                this.nextBot = (currentIndex + 1) % this.bots.size
+                return bot
+            }
+
+            attempts++
+        }
+
+        // If we get here, return the first available bot
+        return readyBots[0][1] // Extract the Bot from the [string, Bot] tuple
     }
 
     @Cron('* * * * * *')
