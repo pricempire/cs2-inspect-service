@@ -183,8 +183,12 @@ export class InspectService implements OnModuleInit {
     }
 
     public stats() {
-        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isAvailable()).length
-        const busyBots = Array.from(this.bots.values()).filter(bot => !bot.isAvailable()).length
+        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length
+        const busyBots = Array.from(this.bots.values()).filter(bot => !bot.isBusy()).length
+        const cooldownBots = Array.from(this.bots.values()).filter(bot => bot.isCooldown()).length
+        const disconnectedBots = Array.from(this.bots.values()).filter(bot => bot.isDisconnected()).length
+        const errorBots = Array.from(this.bots.values()).filter(bot => bot.isError()).length
+        const initializingBots = Array.from(this.bots.values()).filter(bot => bot.isInitializing()).length
         const totalBots = this.bots.size
         const queueUtilization = (this.inspects.size / this.MAX_QUEUE_SIZE) * 100
 
@@ -223,6 +227,10 @@ export class InspectService implements OnModuleInit {
             bots: {
                 ready: readyBots,
                 busy: busyBots,
+                cooldown: cooldownBots,
+                disconnected: disconnectedBots,
+                error: errorBots,
+                initializing: initializingBots,
                 total: totalBots,
                 utilization: (totalBots > 0 ? (busyBots / totalBots) * 100 : 0).toFixed(2) + '%'
             },
@@ -360,7 +368,7 @@ export class InspectService implements OnModuleInit {
 
     private async getAvailableBot(): Promise<Bot | null> {
         const readyBots = Array.from(this.bots.entries())
-            .filter(([_, bot]) => bot.isAvailable())
+            .filter(([_, bot]) => bot.isReady())
 
         if (readyBots.length === 0) {
             return null
@@ -375,7 +383,7 @@ export class InspectService implements OnModuleInit {
             const currentIndex = (startIndex + attempts) % this.bots.size
             const bot = Array.from(this.bots.values())[currentIndex]
 
-            if (bot && bot.isAvailable()) {
+            if (bot && bot.isReady()) {
                 this.nextBot = (currentIndex + 1) % this.bots.size
                 return bot
             }

@@ -65,7 +65,31 @@ export class Bot extends EventEmitter {
         return this.status
     }
 
-    public isAvailable(): boolean {
+    public isBusy(): boolean {
+        return this.status === BotStatus.BUSY
+    }
+
+    public isCooldown(): boolean {
+        return this.status === BotStatus.COOLDOWN
+    }
+
+    public isDisconnected(): boolean {
+        return this.status === BotStatus.DISCONNECTED
+    }
+
+    public isError(): boolean {
+        return this.status === BotStatus.ERROR
+    }
+
+    public isIdle(): boolean {
+        return this.status === BotStatus.IDLE
+    }
+
+    public isInitializing(): boolean {
+        return this.status === BotStatus.INITIALIZING
+    }
+
+    public isReady(): boolean {
         return this.status === BotStatus.READY
     }
 
@@ -213,7 +237,7 @@ export class Bot extends EventEmitter {
     }
 
     public async inspectItem(s: string, a: string, d: string): Promise<void> {
-        if (!this.isAvailable()) {
+        if (!this.isReady()) {
             throw new Error(`Bot is not ready (status: ${this.status})`)
         }
 
@@ -329,6 +353,8 @@ export class Bot extends EventEmitter {
         this.log('Disconnected from Steam')
         this.status = BotStatus.DISCONNECTED
         this.cleanup()
+
+        this.initialize()
     }
 
     private handleLoggedOn(): void {
