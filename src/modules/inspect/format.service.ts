@@ -264,7 +264,7 @@ export class FormatService implements OnModuleInit {
     private buildMarketHashName(weapon: any, paint: Paint | undefined, meta: Metadata): string {
         const parts: string[] = []
 
-        if (meta.defIndex > 500) {
+        if (meta.defIndex >= 500) {
             parts.push('★')
         }
 
