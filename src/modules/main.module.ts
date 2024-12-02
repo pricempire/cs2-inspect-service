@@ -37,7 +37,7 @@ export class MainModule {
         this.logger.debug('Refreshing materialized view "rankings"')
 
         const date = new Date()
-        await this.dataSource.query('REFRESH MATERIALIZED VIEW "rankings"')
+        await this.dataSource.query('REFRESH MATERIALIZED VIEW "rankings" CONCURRENTLY')
         const diff = new Date().getTime() - date.getTime()
 
         this.logger.debug(

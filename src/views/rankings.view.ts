@@ -1,4 +1,4 @@
-import { ViewEntity, ViewColumn } from 'typeorm'
+import { ViewEntity, ViewColumn, Unique, Index } from 'typeorm'
 
 @ViewEntity({
     materialized: true,
@@ -14,6 +14,7 @@ import { ViewEntity, ViewColumn } from 'typeorm'
         WHERE "paint_wear" IS NOT NULL AND "paint_wear" > 0
     `,
 })
+@Index(['assetId'], { unique: true })
 export class Rankings {
     @ViewColumn()
     globalLow: number
