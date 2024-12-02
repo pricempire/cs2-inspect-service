@@ -272,7 +272,30 @@ export class FormatService implements OnModuleInit {
         if (meta.quality === 12) parts.push('Souvenir')
 
         parts.push(weapon.name)
-        if (paint) parts.push(`| ${paint.name}`)
+
+        let paintName = paint.name;
+
+        if (paintName.includes('Doppler (')) {
+            if (paintName.includes('Phase 1')) {
+                paintName = paintName.replace(' (Phase 1)', '') + ' - Phase 1'
+            } else if (paintName.includes('Phase 2')) {
+                paintName = paintName.replace(' (Phase 2)', '') + ' - Phase 2'
+            } else if (paintName.includes('Phase 3')) {
+                paintName = paintName.replace(' (Phase 3)', '') + ' - Phase 3'
+            } else if (paintName.includes('Phase 4')) {
+                paintName = paintName.replace(' (Phase 4)', '') + ' - Phase 4'
+            } else if (paintName.includes('Ruby')) {
+                paintName = paintName.replace(' (Ruby)', '') + ' - Ruby'
+            } else if (paintName.includes('Sapphire')) {
+                paintName = paintName.replace(' (Sapphire)', '') + ' - Sapphire'
+            } else if (paintName.includes('Black Pearl')) {
+                paintName = paintName.replace(' (Black Pearl)', '') + ' - Black Pearl'
+            } else if (paintName.includes('Emerald')) {
+                paintName = paintName.replace(' (Emerald)', '') + ' - Emerald'
+            }
+        }
+
+        if (paint) parts.push(`| ${paintName}`)
         if (meta.wear) parts.push(`(${meta.wear})`)
 
         return parts.join(' ')
