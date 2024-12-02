@@ -45,6 +45,63 @@ export class InspectController {
                     .github-link { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: #1e293b; border-radius: 8px; margin-top: 16px; }
                     .github-link svg { width: 20px; height: 20px; }
                     .logo { width: 200px; height: 50px; }
+                    input {
+                        padding: 12px 16px;
+                        border-radius: 6px;
+                        border: 1px solid #1e293b; /* slate-800 */
+                        background: #1e293b;
+                        color: #e2e8f0;
+                        width: 300px;
+                        font-size: 14px;
+                        transition: all 0.2s;
+                        outline: none;
+                        width: 100%;
+                    }
+                    input:focus {
+                        border-color: #38bdf8; /* sky-400 */
+                        box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+                    }
+                    input::placeholder {
+                        color: #94a3b8; /* slate-400 */
+                    }
+                    button {
+                        padding: 12px 24px;
+                        border-radius: 6px;
+                        border: none;
+                        background: #38bdf8; /* sky-400 */
+                        color: #0f172a; /* slate-900 */
+                        font-weight: 500;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                        margin-left: 8px;
+                    }
+                    button:hover {
+                        background: #0ea5e9; /* sky-500 */
+                    }
+                    button:active {
+                        transform: translateY(1px);
+                    }
+                    form {
+                        margin: 24px 0;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    .error-message {
+                        color: #ef4444; /* red-500 */
+                        font-size: 14px;
+                        margin-top: 8px;
+                        display: none;
+                    }
+                    
+                    input.error {
+                        border-color: #ef4444; /* red-500 */
+                    }
+                    
+                    input.error:focus {
+                        border-color: #ef4444;
+                        box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+                    }
                 </style>
             </head>
             <body>
@@ -86,6 +143,79 @@ export class InspectController {
                     </svg>
                     View on GitHub
                 </a>
+
+                <div>
+                    <h2>Test</h2>
+                    <form id="inspectForm" action="/inspect" method="get" onsubmit="return validateForm(event)">
+                        <div style="flex-direction: column; flex: 1;">
+                            <input 
+                                type="text" 
+                                name="url" 
+                                id="inspectLink"
+                                placeholder="Steam inspect link" 
+                            />
+                            <div id="errorMessage" class="error-message">
+                                Please enter a valid CS2 inspect link (steam://rungame/...)
+                            </div>
+                        </div>
+                        <button type="submit">Inspect</button>
+                    </form>
+                </div>
+
+                <script>
+                    function validateForm(event) {
+                        event.preventDefault();
+                        
+                        const input = document.getElementById('inspectLink');
+                        const errorMessage = document.getElementById('errorMessage');
+                        const value = input.value.trim();
+
+                        // Reset previous error state
+                        input.classList.remove('error');
+                        errorMessage.style.display = 'none';
+
+                        // Check if empty
+                        if (!value) {
+                            showError('Please enter an inspect link');
+                            return false;
+                        }
+
+                        // Validate steam inspect URL format
+                        const steamUrlPattern = /^(?:steam:\/\/rungame\/730\/|https?:\/\/(?:www\.)?steamcommunity\.com\/market\/listings\/730\/.*[?&]inspectlink=steam:\/\/rungame\/730\/)/i;
+                        
+                        // Check for S, A, D, M parameters format
+                        const paramPattern = /[?&](?:s=\d+&a=\d+&d=\d+&m=\d+|[SADM]=\d+)/i;
+
+                        if (!steamUrlPattern.test(value) && !paramPattern.test(value)) {
+                            showError('Please enter a valid CS2 inspect link');
+                            return false;
+                        }
+
+                        // If validation passes, manually submit the form
+                        window.location.href = \`/inspect?link=\${encodeURIComponent(value)}\`;
+                        return true;
+                    }
+
+                    function showError(message) {
+                        const input = document.getElementById('inspectLink');
+                        const errorMessage = document.getElementById('errorMessage');
+                        
+                        input.classList.add('error');
+                        errorMessage.textContent = message;
+                        errorMessage.style.display = 'block';
+                        
+                        return false;
+                    }
+
+                    // Update the input event listener to not trigger form submission
+                    document.getElementById('inspectLink').addEventListener('input', function() {
+                        const errorMessage = document.getElementById('errorMessage');
+                        if (!this.value.trim()) {
+                            this.classList.remove('error');
+                            errorMessage.style.display = 'none';
+                        }
+                    });
+                </script>
 
                 <div class="endpoint">
                     <h2>Endpoints</h2>
