@@ -184,7 +184,7 @@ export class InspectService implements OnModuleInit {
 
     public stats() {
         const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length
-        const busyBots = Array.from(this.bots.values()).filter(bot => !bot.isBusy()).length
+        const busyBots = Array.from(this.bots.values()).filter(bot => bot.isBusy()).length
         const cooldownBots = Array.from(this.bots.values()).filter(bot => bot.isCooldown()).length
         const disconnectedBots = Array.from(this.bots.values()).filter(bot => bot.isDisconnected()).length
         const errorBots = Array.from(this.bots.values()).filter(bot => bot.isError()).length
