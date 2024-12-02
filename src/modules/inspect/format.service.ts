@@ -271,7 +271,7 @@ export class FormatService implements OnModuleInit {
         if (meta.quality === 9) parts.push('StatTrak™')
         if (meta.quality === 12) parts.push('Souvenir')
 
-
+        parts.push(weapon.name)
         if (paint) parts.push(`| ${paint.name}`)
         if (meta.wear) parts.push(`(${meta.wear})`)
 
