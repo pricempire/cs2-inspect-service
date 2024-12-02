@@ -273,30 +273,41 @@ export class FormatService implements OnModuleInit {
 
         parts.push(weapon.name)
 
+        let phase;
+
         let paintName = paint.name;
 
         if (paintName.includes('Doppler (')) {
             if (paintName.includes('Phase 1')) {
-                paintName = paintName.replace(' (Phase 1)', '') + ' - Phase 1'
+                paintName = paintName.replace(' (Phase 1)', '')
+                phase = 'Phase 1'
             } else if (paintName.includes('Phase 2')) {
-                paintName = paintName.replace(' (Phase 2)', '') + ' - Phase 2'
+                paintName = paintName.replace(' (Phase 2)', '')
+                phase = 'Phase 2'
             } else if (paintName.includes('Phase 3')) {
-                paintName = paintName.replace(' (Phase 3)', '') + ' - Phase 3'
+                paintName = paintName.replace(' (Phase 3)', '')
+                phase = 'Phase 3'
             } else if (paintName.includes('Phase 4')) {
-                paintName = paintName.replace(' (Phase 4)', '') + ' - Phase 4'
+                paintName = paintName.replace(' (Phase 4)', '')
+                phase = 'Phase 4'
             } else if (paintName.includes('Ruby')) {
-                paintName = paintName.replace(' (Ruby)', '') + ' - Ruby'
+                paintName = paintName.replace(' (Ruby)', '')
+                phase = 'Ruby'
             } else if (paintName.includes('Sapphire')) {
-                paintName = paintName.replace(' (Sapphire)', '') + ' - Sapphire'
+                paintName = paintName.replace(' (Sapphire)', '')
+                phase = 'Sapphire'
             } else if (paintName.includes('Black Pearl')) {
-                paintName = paintName.replace(' (Black Pearl)', '') + ' - Black Pearl'
+                paintName = paintName.replace(' (Black Pearl)', '')
+                phase = 'Black Pearl'
             } else if (paintName.includes('Emerald')) {
-                paintName = paintName.replace(' (Emerald)', '') + ' - Emerald'
+                paintName = paintName.replace(' (Emerald)', '')
+                phase = 'Emerald'
             }
         }
 
         if (paint) parts.push(`| ${paintName}`)
         if (meta.wear) parts.push(`(${meta.wear})`)
+        if (phase) parts.push(`- ${phase}`)
 
         return parts.join(' ')
     }
