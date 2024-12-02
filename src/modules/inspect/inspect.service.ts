@@ -476,7 +476,7 @@ export class InspectService implements OnModuleInit {
         })
 
         if (!existing) {
-            await this.historyRepository.save({
+            await this.historyRepository.upsert({
                 uniqueId,
                 assetId: parseInt(response.itemid),
                 prevAssetId: history?.assetId,
@@ -488,7 +488,7 @@ export class InspectService implements OnModuleInit {
                 prevStickers: history?.stickers,
                 prevKeychains: history?.keychains,
                 type: this.getHistoryType(response, history, inspectData),
-            })
+            }, ['assetId', 'uniqueId'])
         }
     }
 
