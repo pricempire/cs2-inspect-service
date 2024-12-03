@@ -54,6 +54,7 @@ export interface FormattedResponse {
         floatvalue?: number;
         paintseed?: number;
         wear_name?: string;
+        sticker_id?: number;
         market_hash_name: string;
         souvenir?: boolean;
         stattrak?: boolean;

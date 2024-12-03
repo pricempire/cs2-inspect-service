@@ -144,6 +144,7 @@ export class FormatService implements OnModuleInit {
                 quality: asset.quality,
                 origin: asset.origin,
                 market_hash_name: sticker.market_hash_name,
+                sticker_id: stickerId,
                 type: 'Sticker',
             },
         }
@@ -179,6 +180,7 @@ export class FormatService implements OnModuleInit {
     }
 
     private formatGraffiti(asset: Asset): FormattedResponse {
+        return asset as any;
         const graffiti = this.schema.graffiti[asset.paintIndex]
         if (!graffiti) {
             throw new HttpException('Graffiti not found', HttpStatus.NOT_FOUND)
