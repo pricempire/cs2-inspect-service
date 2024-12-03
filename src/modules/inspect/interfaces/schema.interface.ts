@@ -55,7 +55,7 @@ export interface FormattedResponse {
         paintseed?: number;
         wear_name?: string;
         sticker_id?: number;
-        market_hash_name: string;
+        market_hash_name?: string;
         souvenir?: boolean;
         graffiti_id?: number;
         stattrak?: boolean;
