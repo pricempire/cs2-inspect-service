@@ -117,6 +117,12 @@ export class InspectService implements OnModuleInit {
         const BATCH_SIZE = 500;
         const MAX_RETRIES = 3;
 
+        const sessionPath = process.env.SESSION_PATH || './sessions';
+        if (!fs.existsSync(sessionPath)) {
+            fs.mkdirSync(sessionPath, { recursive: true });
+            this.logger.debug(`Created session directory at: ${sessionPath}`);
+        }
+
         for (let i = 0; i < this.accounts.length; i += BATCH_SIZE) {
             const batch = this.accounts.slice(i, i + BATCH_SIZE);
             const initPromises = batch.map(async (account) => {
@@ -138,7 +144,8 @@ export class InspectService implements OnModuleInit {
                             username,
                             password,
                             proxyUrl: process.env.PROXY_URL,
-                            debug: true
+                            debug: false,
+                            sessionPath,
                         });
 
                         bot.on('inspectResult', (response) => this.handleInspectResult(username, response));

@@ -58,3 +58,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Custom for project
 accounts.txt
 accounts2.txt
+
+sessions
+sessions/*
+logon_sessions
+logon_sessions/*

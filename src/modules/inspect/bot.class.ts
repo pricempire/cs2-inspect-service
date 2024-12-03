@@ -2,6 +2,8 @@ import * as SteamUser from 'steam-user'
 import * as GlobalOffensive from 'globaloffensive'
 import { Logger } from '@nestjs/common'
 import { EventEmitter } from 'events'
+import * as fs from 'fs/promises'
+import * as path from 'path'
 
 export enum BotStatus {
     IDLE = 'IDLE',
@@ -33,6 +35,7 @@ interface BotConfig {
     cooldownTime?: number
     maxRetries?: number
     debug?: boolean
+    sessionPath?: string
 }
 
 export class Bot extends EventEmitter {
@@ -45,6 +48,8 @@ export class Bot extends EventEmitter {
     private currentInspectTimeout: NodeJS.Timeout | null = null
     private initializationTimeout: NodeJS.Timeout | null = null
     private cooldownTimeout: NodeJS.Timeout | null = null
+    private readonly sessionFile: string
+    private refreshToken: string | null = null
 
     private readonly config: Required<BotConfig>
 
@@ -57,8 +62,10 @@ export class Bot extends EventEmitter {
             maxRetries: 3,
             debug: false,
             proxyUrl: '',
+            sessionPath: './sessions',
             ...config
         }
+        this.sessionFile = path.join(this.config.sessionPath, `${this.config.username}.json`)
     }
 
     public get currentStatus(): BotStatus {
@@ -134,6 +141,21 @@ export class Bot extends EventEmitter {
             this.steamUser!.on('loggedOn', checkInitComplete)
             this.cs2Instance!.on('connectedToGC', checkInitComplete)
 
+            this.steamUser!.on('error', (err) => {
+                this.log(`Steam error during initialization: ${err.message}`, true)
+                reject(err)
+            })
+
+            this.steamUser!.on('disconnected', (err) => {
+                this.log(`Steam disconnected during initialization: ${err.message}`, true)
+                reject(err)
+            })
+
+            this.steamUser!.on('loggedOff', (err) => {
+                this.log(`Steam logged off during initialization: ${err.message}`, true)
+                reject(err)
+            })
+
             this.login()
         })
     }
@@ -171,7 +193,43 @@ export class Bot extends EventEmitter {
     private setupSteamUserEvents(): void {
         this.steamUser!.on('error', this.handleSteamError.bind(this))
         this.steamUser!.on('disconnected', this.handleDisconnect.bind(this))
-        this.steamUser!.on('loggedOn', this.handleLoggedOn.bind(this))
+
+        // Handle Steam Guard code request
+        this.steamUser!.on('steamGuard', (domain: string, callback: (code: string) => void) => {
+            this.log('Steam Guard code requested - this account has Steam Guard enabled', true)
+            // You might want to implement a way to provide Steam Guard codes
+            callback('')  // Empty callback will cancel the login attempt
+        })
+
+        this.steamUser!.on('loggedOn', async (details: any) => {
+            this.log(`Logged in successfully. Account flags: ${details?.account_flags || 'unknown'}`)
+            await this.handleLoggedOn()
+        })
+
+        this.steamUser!.on('refreshToken', async (token: string) => {
+            this.log('Received new refresh token')
+            if (token) {
+                this.refreshToken = token
+                await this.saveSession()
+            }
+        })
+
+        this.steamUser!.on('webSession', async () => {
+            this.log('Web session established')
+            const token = this.steamUser?.refreshToken
+            if (token) {
+                this.log('Refresh token available after web session')
+                await this.saveSession()
+            } else {
+                this.log('No refresh token available after web session')
+            }
+        })
+
+        if (this.config.debug) {
+            this.steamUser!.on('debug', (msg: string) => {
+                this.log(`Steam Debug: ${msg}`)
+            })
+        }
     }
 
     private setupCS2Instance(): void {
@@ -357,7 +415,7 @@ export class Bot extends EventEmitter {
         this.initialize()
     }
 
-    private handleLoggedOn(): void {
+    private async handleLoggedOn(): Promise<void> {
         this.log('Logged into Steam')
 
         if (this.steamUser) {
@@ -380,10 +438,124 @@ export class Bot extends EventEmitter {
         }
     }
 
-    private login(): void {
-        this.steamUser!.logOn({
-            accountName: this.config.username,
-            password: this.config.password
-        })
+    private async login(): Promise<void> {
+        try {
+            const session = await this.loadSession()
+
+            // First try with refresh token if available
+            if (session?.refreshToken) {
+                this.log('Found existing refresh token, attempting to use it')
+
+                const refreshTokenLogin = new Promise<void>((resolve, reject) => {
+                    const errorHandler = (error: any) => {
+                        if (error.message.includes('InvalidPassword')) {
+                            this.log('Refresh token login failed, will retry with password')
+                            this.steamUser!.removeListener('error', errorHandler)
+                            this.steamUser!.removeListener('loggedOn', successHandler)
+                            resolve() // Resolve to try password login
+                        } else {
+                            reject(error)
+                        }
+                    }
+
+                    const successHandler = () => {
+                        this.log('Successfully logged in with refresh token')
+                        this.steamUser!.removeListener('error', errorHandler)
+                        this.steamUser!.removeListener('loggedOn', successHandler)
+                        resolve()
+                    }
+
+                    this.steamUser!.on('error', errorHandler)
+                    this.steamUser!.on('loggedOn', successHandler)
+
+                    // Only provide required and optional properties for refresh token login
+                    this.steamUser!.logOn({
+                        refreshToken: session.refreshToken,
+                        logonID: Math.floor(Math.random() * 100000000),
+                        machineName: `CS2Bot_${this.config.username}`
+                    })
+                })
+
+                try {
+                    await refreshTokenLogin
+                    return // If refresh token login succeeded, we're done
+                } catch (error) {
+                    this.log(`Refresh token login error: ${error.message}`, true)
+                    // Continue to password login if it's an invalid refresh token
+                    if (!error.message.includes('InvalidPassword')) {
+                        throw error
+                    }
+                }
+            }
+
+            // Password login with required properties
+            this.log('Attempting password login')
+            this.steamUser!.logOn({
+                accountName: this.config.username,
+                password: this.config.password,
+                logonID: Math.floor(Math.random() * 100000000),
+                machineName: `CS2Bot_${this.config.username}`
+            })
+
+        } catch (error) {
+            this.log(`Login error: ${error.message}`, true)
+            throw error
+        }
+    }
+
+    private async loadSession(): Promise<any> {
+        try {
+            await fs.mkdir(this.config.sessionPath, { recursive: true })
+            const data = await fs.readFile(this.sessionFile, 'utf8')
+            const session = JSON.parse(data)
+
+            if (session?.refreshToken) {
+                this.log('Found existing session data')
+                // Check if the session is not too old (e.g., 180 days)
+                const ageInDays = (Date.now() - (session.timestamp || 0)) / (1000 * 60 * 60 * 24)
+                if (ageInDays > 180) {
+                    this.log('Session is too old, will create new one')
+                    return null
+                }
+            }
+
+            return session
+        } catch (error) {
+            this.log('No existing session found or error reading session')
+            return null
+        }
+    }
+
+    private async saveSession(): Promise<void> {
+        try {
+            if (!this.steamUser) {
+                this.log('Cannot save session: Steam user is null', true)
+                return
+            }
+
+            const refreshToken = this.refreshToken
+
+            if (!refreshToken) {
+                this.log('No refresh token available to save - this might be normal for Steam Guard enabled accounts', true)
+                return
+            }
+
+            const session = {
+                refreshToken,
+                timestamp: Date.now(),
+                username: this.config.username,
+                hasGuard: this.steamUser?.isSteamGuardEnabled || false
+            }
+
+            await fs.mkdir(this.config.sessionPath, { recursive: true })
+            await fs.writeFile(
+                this.sessionFile,
+                JSON.stringify(session, null, 2)
+            )
+
+            this.log(`Session saved successfully for ${this.config.username}`)
+        } catch (error) {
+            this.log(`Failed to save session: ${error.message}`, true)
+        }
     }
 }
