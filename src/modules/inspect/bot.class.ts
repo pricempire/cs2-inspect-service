@@ -53,7 +53,7 @@ export class Bot extends EventEmitter {
         this.config = {
             initTimeout: 60000,
             inspectTimeout: 5000,
-            cooldownTime: 30000,
+            cooldownTime: 1000,
             maxRetries: 3,
             debug: false,
             proxyUrl: '',

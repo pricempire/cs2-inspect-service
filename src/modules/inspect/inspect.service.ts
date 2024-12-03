@@ -267,12 +267,12 @@ export class InspectService implements OnModuleInit {
     }
 
     public async inspectItem(query: InspectDto) {
-        if (this.bots.size === 0) {
-            throw new HttpException(
-                'Service is still initializing, please try again later',
-                HttpStatus.SERVICE_UNAVAILABLE
-            )
-        }
+        // if (this.bots.size === 0) {
+        //     throw new HttpException(
+        //         'Service is still initializing, please try again later',
+        //         HttpStatus.SERVICE_UNAVAILABLE
+        //     )
+        // }
 
         if (this.inspects.size >= this.MAX_QUEUE_SIZE) {
             throw new HttpException(
