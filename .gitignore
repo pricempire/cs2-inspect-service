@@ -59,6 +59,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 accounts.txt
 accounts2.txt
 
+blacklist.txt
+
 sessions
 sessions/*
 logon_sessions
