@@ -409,10 +409,10 @@ export class Bot extends EventEmitter {
     }
 
     private log(message: string, isError = false): void {
-        if (this.config.debug || isError) {
-            const logFn = isError ? this.logger.error : this.logger.debug
-            logFn.call(this.logger, `[${this.config.username}] ${message}`)
-        }
+        // if (this.config.debug || isError) {
+        const logFn = isError ? this.logger.error : this.logger.debug
+        logFn.call(this.logger, `[${this.config.username}] ${message}`)
+        // }
     }
 
     private handleInitializationError(error: any): void {
@@ -429,37 +429,30 @@ export class Bot extends EventEmitter {
 
         this.initialize()
     }
+    private requestCS2License() {
+        this.steamUser.requestFreeLicense([730], (err, grantedPackages, grantedAppIDs) => {
+            this.log(`${this.config.username} Granted Packages`, grantedPackages)
+            this.log(`${this.config.username} Granted App IDs`, grantedAppIDs)
+            if (err) {
+                this.log(`${this.config.username} Failed to obtain free CS:GO license`, true)
+            } else {
+                this.log(`${this.config.username}: Initiating GC Connection`)
+                this.steamUser.gamesPlayed([730], true)
+            }
+        })
+    }
 
     private async handleLoggedOn(): Promise<void> {
         this.log('Logged into Steam')
-
-        if (this.steamUser) {
-            // Check if CS2 is in the library
-            const ownedGames = await this.steamUser.getOwnedApps()
-            if (!ownedGames.includes(730)) {
-                this.log('CS2 not found in library, attempting to add it...')
-                try {
-                    await new Promise<void>((resolve, reject) => {
-                        this.steamUser!.requestFreeLicense([730], (err) => {
-                            if (err) {
-                                reject(err)
-                            } else {
-                                resolve()
-                            }
-                        })
-                    })
-                    this.log('Successfully added CS2 to library')
-                } catch (error) {
-                    this.log(`Failed to add CS2 to library: ${error.message}`, true)
-                    this.status = BotStatus.ERROR
-                    this.emit('error', BotError.GC_ERROR)
-                    return
-                }
+        this.steamUser.once('ownershipCached', () => {
+            if (!this.steamUser.ownsApp(730)) {
+                this.log(`${this.config.username} doesn't own CS:GO, retrieving free license`)
+                this.requestCS2License()
+            } else {
+                this.log(`${this.config.username}: Initiating GC Connection`)
+                this.steamUser.gamesPlayed([730], true)
             }
-
-            this.log('Setting game played to CS2')
-            this.steamUser.gamesPlayed([730])
-        }
+        })
     }
 
     private handleGCDisconnect(): void {
@@ -483,58 +476,22 @@ export class Bot extends EventEmitter {
             // First try with refresh token if available
             if (session?.refreshToken) {
                 this.log('Found existing refresh token, attempting to use it')
-
-                const refreshTokenLogin = new Promise<void>((resolve, reject) => {
-                    const errorHandler = (error: any) => {
-                        if (error.message.includes('InvalidPassword')) {
-                            this.log('Refresh token login failed, will retry with password')
-                            this.steamUser!.removeListener('error', errorHandler)
-                            this.steamUser!.removeListener('loggedOn', successHandler)
-                            resolve() // Resolve to try password login
-                        } else {
-                            reject(error)
-                        }
-                    }
-
-                    const successHandler = () => {
-                        this.log('Successfully logged in with refresh token')
-                        this.steamUser!.removeListener('error', errorHandler)
-                        this.steamUser!.removeListener('loggedOn', successHandler)
-                        resolve()
-                    }
-
-                    this.steamUser!.on('error', errorHandler)
-                    this.steamUser!.on('loggedOn', successHandler)
-
-                    // Only provide required and optional properties for refresh token login
-                    this.steamUser!.logOn({
-                        refreshToken: session.refreshToken,
-                        logonID: Math.floor(Math.random() * 100000000),
-                        machineName: `CS2Bot_${this.config.username}`
-                    })
+                this.steamUser!.logOn({
+                    refreshToken: session.refreshToken,
+                    logonID: Math.floor(Math.random() * 100000000),
+                    machineName: `CS2Bot_${this.config.username}`
+                })
+            } else {
+                // Password login with required properties
+                this.log('Attempting password login')
+                this.steamUser!.logOn({
+                    accountName: this.config.username,
+                    password: this.config.password,
+                    logonID: Math.floor(Math.random() * 100000000),
+                    machineName: `CS2Bot_${this.config.username}`
                 })
 
-                try {
-                    await refreshTokenLogin
-                    return // If refresh token login succeeded, we're done
-                } catch (error) {
-                    this.log(`Refresh token login error: ${error.message}`, true)
-                    // Continue to password login if it's an invalid refresh token
-                    if (!error.message.includes('InvalidPassword')) {
-                        throw error
-                    }
-                }
             }
-
-            // Password login with required properties
-            this.log('Attempting password login')
-            this.steamUser!.logOn({
-                accountName: this.config.username,
-                password: this.config.password,
-                logonID: Math.floor(Math.random() * 100000000),
-                machineName: `CS2Bot_${this.config.username}`
-            })
-
         } catch (error) {
             this.log(`Login error: ${error.message}`, true)
             throw error
