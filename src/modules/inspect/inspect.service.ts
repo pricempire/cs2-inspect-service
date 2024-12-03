@@ -24,9 +24,9 @@ import { createHash } from 'crypto'
 export class InspectService implements OnModuleInit {
     private readonly logger = new Logger(InspectService.name)
     private startTime: number = Date.now()
-    private readonly QUEUE_TIMEOUT = 5000 // 5 seconds timeout
-    private readonly MAX_RETRIES = 3
-    private readonly MAX_QUEUE_SIZE = 100
+    private readonly QUEUE_TIMEOUT = parseInt(process.env.QUEUE_TIMEOUT || '5000') // 5 seconds timeout
+    private readonly MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3')
+    private readonly MAX_QUEUE_SIZE = parseInt(process.env.MAX_QUEUE_SIZE || '100')
     private throttledAccounts: Map<string, number> = new Map()
     private readonly THROTTLE_COOLDOWN = 30 * 60 * 1000 // 30 minutes in milliseconds
 

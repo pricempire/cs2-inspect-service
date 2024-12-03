@@ -306,7 +306,7 @@ export class FormatService implements OnModuleInit {
         }
 
         if (paint) parts.push(`| ${paintName}`)
-        if (meta.wear) parts.push(`(${meta.wear})`)
+        if (meta.wear && paint /** make sure it wont add to the vanilla paint */) parts.push(`(${meta.wear})`)
         if (phase) parts.push(`- ${phase}`)
 
         return parts.join(' ')
