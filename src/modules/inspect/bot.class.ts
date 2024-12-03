@@ -409,10 +409,10 @@ export class Bot extends EventEmitter {
     }
 
     private log(message: string, isError = false): void {
-        // if (this.config.debug || isError) {
-        const logFn = isError ? this.logger.error : this.logger.debug
-        logFn.call(this.logger, `[${this.config.username}] ${message}`)
-        // }
+        if (this.config.debug || isError) {
+            const logFn = isError ? this.logger.error : this.logger.debug
+            logFn.call(this.logger, `[${this.config.username}] ${message}`)
+        }
     }
 
     private handleInitializationError(error: any): void {
