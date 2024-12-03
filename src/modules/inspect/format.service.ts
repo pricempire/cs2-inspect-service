@@ -123,6 +123,7 @@ export class FormatService implements OnModuleInit {
                 if (this.schema.agents[asset.defIndex]) {
                     return this.formatAgent(asset)
                 }
+                console.log(asset);
                 throw new HttpException('Item not found', HttpStatus.NOT_FOUND)
         }
     }
