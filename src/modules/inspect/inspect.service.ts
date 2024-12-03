@@ -114,8 +114,8 @@ export class InspectService implements OnModuleInit {
     }
 
     private async initializeAllBots() {
-        const BATCH_SIZE = 500;
-        const MAX_RETRIES = 3;
+        const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || '100');
+        const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3');
 
         const sessionPath = process.env.SESSION_PATH || './sessions';
         if (!fs.existsSync(sessionPath)) {
