@@ -434,6 +434,29 @@ export class Bot extends EventEmitter {
         this.log('Logged into Steam')
 
         if (this.steamUser) {
+            // Check if CS2 is in the library
+            const ownedGames = await this.steamUser.getOwnedApps()
+            if (!ownedGames.includes(730)) {
+                this.log('CS2 not found in library, attempting to add it...')
+                try {
+                    await new Promise<void>((resolve, reject) => {
+                        this.steamUser!.requestFreeLicense([730], (err) => {
+                            if (err) {
+                                reject(err)
+                            } else {
+                                resolve()
+                            }
+                        })
+                    })
+                    this.log('Successfully added CS2 to library')
+                } catch (error) {
+                    this.log(`Failed to add CS2 to library: ${error.message}`, true)
+                    this.status = BotStatus.ERROR
+                    this.emit('error', BotError.GC_ERROR)
+                    return
+                }
+            }
+
             this.log('Setting game played to CS2')
             this.steamUser.gamesPlayed([730])
         }
