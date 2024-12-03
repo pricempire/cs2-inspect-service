@@ -144,7 +144,7 @@ export class InspectService implements OnModuleInit {
                             username,
                             password,
                             proxyUrl: process.env.PROXY_URL,
-                            debug: false,
+                            debug: process.env.DEBUG === 'true',
                             sessionPath,
                         });
 
