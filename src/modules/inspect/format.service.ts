@@ -128,7 +128,10 @@ export class FormatService implements OnModuleInit {
     }
 
     private formatSticker(asset: Asset): FormattedResponse {
-        const sticker = this.schema.stickers[asset.paintIndex]
+
+        const stickerId = asset.stickers[0].sticker_id
+
+        const sticker = this.schema.stickers[stickerId]
         if (!sticker) {
             throw new HttpException('Sticker not found', HttpStatus.NOT_FOUND)
         }
