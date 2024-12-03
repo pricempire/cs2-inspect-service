@@ -57,6 +57,7 @@ export interface FormattedResponse {
         sticker_id?: number;
         market_hash_name: string;
         souvenir?: boolean;
+        graffiti_id?: number;
         stattrak?: boolean;
         image?: string;
         type: 'Weapon' | 'Sticker' | 'Graffiti' | 'Agent' | 'Keychain';

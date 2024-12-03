@@ -15,6 +15,7 @@ import { Schema, FormattedResponse, Metadata, Paint } from './interfaces/schema.
 
 enum ItemDefIndex {
     Sticker = 1209,
+    Graffiti2 = 1348,
     Graffiti = 1349,
     Keychain = 1355,
 }
@@ -116,6 +117,7 @@ export class FormatService implements OnModuleInit {
             case ItemDefIndex.Sticker:
                 return this.formatSticker(asset)
             case ItemDefIndex.Graffiti:
+            case ItemDefIndex.Graffiti2:
                 return this.formatGraffiti(asset)
             case ItemDefIndex.Keychain:
                 return this.formatKeychain(asset)
@@ -123,7 +125,6 @@ export class FormatService implements OnModuleInit {
                 if (this.schema.agents[asset.defIndex]) {
                     return this.formatAgent(asset)
                 }
-                console.log(asset);
                 throw new HttpException('Item not found', HttpStatus.NOT_FOUND)
         }
     }
@@ -152,7 +153,6 @@ export class FormatService implements OnModuleInit {
     }
 
     private formatKeychain(asset: Asset): FormattedResponse {
-
         const keychainId = asset.keychains.find((keychain) => keychain.slot === 0)?.sticker_id
         if (!keychainId) {
             throw new HttpException('Keychain not found', HttpStatus.NOT_FOUND)
@@ -181,8 +181,8 @@ export class FormatService implements OnModuleInit {
     }
 
     private formatGraffiti(asset: Asset): FormattedResponse {
-        return asset as any;
-        const graffiti = this.schema.graffiti[asset.paintIndex]
+        const graffitiId = asset.stickers[0].sticker_id
+        const graffiti = this.schema.graffiti[graffitiId]
         if (!graffiti) {
             throw new HttpException('Graffiti not found', HttpStatus.NOT_FOUND)
         }
@@ -195,6 +195,7 @@ export class FormatService implements OnModuleInit {
                 quality: asset.quality,
                 origin: asset.origin,
                 market_hash_name: graffiti.market_hash_name,
+                graffiti_id: graffitiId,
                 type: 'Graffiti',
             },
         }
