@@ -277,7 +277,7 @@ export class FormatService implements OnModuleInit {
 
         let paintName = paint?.name;
 
-        if (paintName.includes('Doppler (')) {
+        if (paintName && paintName.includes('Doppler (')) {
             if (paintName.includes('Phase 1')) {
                 paintName = paintName.replace(' (Phase 1)', '')
                 phase = 'Phase 1'
