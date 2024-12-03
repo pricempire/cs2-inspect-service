@@ -114,7 +114,7 @@ export class InspectService implements OnModuleInit {
     }
 
     private async initializeAllBots() {
-        const BATCH_SIZE = 100;
+        const BATCH_SIZE = 500;
         const MAX_RETRIES = 3;
 
         for (let i = 0; i < this.accounts.length; i += BATCH_SIZE) {
