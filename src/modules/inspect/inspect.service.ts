@@ -146,6 +146,7 @@ export class InspectService implements OnModuleInit {
                             proxyUrl: process.env.PROXY_URL,
                             debug: process.env.DEBUG === 'true',
                             sessionPath,
+                            blacklistPath: process.env.BLACKLIST_PATH || './blacklist.txt',
                         });
 
                         bot.on('inspectResult', (response) => this.handleInspectResult(username, response));

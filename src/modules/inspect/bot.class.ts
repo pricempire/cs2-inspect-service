@@ -36,6 +36,7 @@ interface BotConfig {
     maxRetries?: number
     debug?: boolean
     sessionPath?: string
+    blacklistPath?: string
 }
 
 export class Bot extends EventEmitter {
@@ -63,6 +64,7 @@ export class Bot extends EventEmitter {
             debug: false,
             proxyUrl: '',
             sessionPath: './sessions',
+            blacklistPath: './blacklist.txt',
             ...config
         }
         this.sessionFile = path.join(this.config.sessionPath, `${this.config.username}.json`)
@@ -103,6 +105,11 @@ export class Bot extends EventEmitter {
     public async initialize(): Promise<void> {
         if (this.status === BotStatus.INITIALIZING) {
             throw new Error('Bot is already initializing')
+        }
+
+        if (await this.checkBlacklist()) {
+            this.status = BotStatus.ERROR
+            throw new Error('Account is blacklisted')
         }
 
         this.cleanup()
@@ -195,10 +202,10 @@ export class Bot extends EventEmitter {
         this.steamUser!.on('disconnected', this.handleDisconnect.bind(this))
 
         // Handle Steam Guard code request
-        this.steamUser!.on('steamGuard', (domain: string, callback: (code: string) => void) => {
+        this.steamUser!.on('steamGuard', async (domain: string, callback: (code: string) => void) => {
             this.log('Steam Guard code requested - this account has Steam Guard enabled', true)
-            // You might want to implement a way to provide Steam Guard codes
-            callback('')  // Empty callback will cancel the login attempt
+            await this.addToBlacklist('STEAM_GUARD_REQUIRED')
+            callback('')
         })
 
         this.steamUser!.on('loggedOn', async (details: any) => {
@@ -255,6 +262,14 @@ export class Bot extends EventEmitter {
 
     private handleSteamError(error: any): void {
         this.log(`Steam error: ${error.message}`, true)
+
+        if (error.message.includes('InvalidPassword') ||
+            error.message.includes('AccountDisabled')
+            // || error.message.includes('AccountLoginDeniedThrottle')
+        ) {
+            this.addToBlacklist(this.mapError(error))
+                .catch(err => this.log(`Failed to add to blacklist: ${err.message}`, true))
+        }
 
         if (this.shouldRetry(error)) {
             this.retryInitialization()
@@ -557,5 +572,26 @@ export class Bot extends EventEmitter {
         } catch (error) {
             this.log(`Failed to save session: ${error.message}`, true)
         }
+    }
+
+    private async checkBlacklist(): Promise<boolean> {
+        try {
+            const content = await fs.readFile(this.config.blacklistPath, 'utf8')
+            const blacklistedAccounts = content.split('\n').map(line => line.trim())
+            return blacklistedAccounts.includes(this.config.username)
+        } catch (error) {
+            // If file doesn't exist, create it
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+                await fs.writeFile(this.config.blacklistPath, '', 'utf8')
+                return false
+            }
+            throw error
+        }
+    }
+
+    private async addToBlacklist(reason: string): Promise<void> {
+        const entry = `${this.config.username}:${reason}:${new Date().toISOString()}`
+        await fs.appendFile(this.config.blacklistPath, entry + '\n', 'utf8')
+        this.log(`Account added to blacklist: ${entry}`)
     }
 }
