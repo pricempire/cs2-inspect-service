@@ -79,7 +79,7 @@ export class ImportModule implements OnModuleInit {
         this.logger.debug('Count of items in items: ' + count[0].count)
 
         let lastid = 0
-        const concurrentBatches = 5 // Number of parallel batches
+        const concurrentBatches = 20 // Number of parallel batches
 
         // Try to load last id from file first
         try {
