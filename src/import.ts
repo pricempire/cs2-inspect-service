@@ -1,5 +1,4 @@
 import { NestFactory } from '@nestjs/core'
-import { MainModule } from './modules/main.module'
 import { ImportModule } from './modules/import.module'
 import 'dotenv/config'
 

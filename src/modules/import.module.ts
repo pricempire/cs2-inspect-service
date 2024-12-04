@@ -1,8 +1,9 @@
 import { Logger, Module, OnModuleInit } from '@nestjs/common'
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm'
 import { DataSource } from 'typeorm'
-import 'dotenv/config'
 import { createHash } from 'crypto'
+import 'dotenv/config'
+import { promises as fs } from 'fs'
 
 @Module({
     imports: [
@@ -20,7 +21,7 @@ import { createHash } from 'crypto'
             name: 'to',
             host: process.env.POSTGRESQL_HOST,
             port: parseInt(process.env.POSTGRESQL_PORT, 10),
-            username: process.env.POSTGRESQL_USER,
+            username: process.env.POSTGRESQL_USERNAME,
             password: process.env.POSTGRESQL_PASSWORD,
             database: process.env.POSTGRESQL_DB,
         }),
@@ -43,12 +44,14 @@ export class ImportModule implements OnModuleInit {
         }, 5000)
     }
 
-    private convertStickers(oldStickers: Array<{ d?: number, i: number, s: number }>) {
+    private convertStickers(oldStickers: Array<{ d?: number, i: number, s: number, w: number }>) {
         if (!oldStickers) return null;
 
         return oldStickers.map(sticker => ({
             slot: sticker.s,
-            wear: sticker.d ? this.convertWearValue(sticker.d) : null,
+            wear: sticker.w ? sticker.w : null,
+            // to save space
+            /*
             scale: null,
             pattern: null,
             tint_id: null,
@@ -56,6 +59,7 @@ export class ImportModule implements OnModuleInit {
             offset_y: null,
             offset_z: null,
             rotation: null,
+            */
             sticker_id: sticker.i
         }));
     }
@@ -78,14 +82,17 @@ export class ImportModule implements OnModuleInit {
         const bulks = []
         let lastid = 0
 
-        // Recover last id
-        const lastIdQuery = await this.toDataSource.query(
-            'SELECT asset_id FROM "asset" ORDER BY asset_id DESC LIMIT 1'
-        )
-
-        if (lastIdQuery.length > 0) {
-            this.logger.debug('Last id: ' + lastIdQuery[0].asset_id)
-            lastid = lastIdQuery[0].asset_id
+        // Try to load last id from file first
+        try {
+            if (process.env.LAST_ID_FILE) {
+                const savedId = await fs.readFile(process.env.LAST_ID_FILE, 'utf8');
+                if (savedId) {
+                    lastid = parseInt(savedId, 10);
+                    this.logger.debug('Loaded last id from file: ' + lastid);
+                }
+            }
+        } catch {
+            this.logger.debug('No last id file found, starting from 0')
         }
 
         while (offset < count[0].count) {
@@ -95,6 +102,16 @@ export class ImportModule implements OnModuleInit {
                 `SELECT * FROM "items" WHERE floatid > ${lastid} ORDER BY floatid LIMIT ${this.limit}`
             )
 
+            console.log(items)
+
+            /*
+            ms  a   d   paintseed   paintwear   defindex   paintindex   stattrak    souvenir    props   stickers   updated  rarity  floatid price   listed_price
+            76561198021522664	5928367	-8743621595771947940	0	0	1002	0	f	f	394240		2024-05-29 01:14:11.879828	6	174528		
+            76561197960604062	2425156	-6015106280277388261	0	0	1003	0	f	f	394240		2024-05-23 10:37:05.276998	6	203697		
+            76561198058765012	36143445191	5398237320703948867	0	0	1001	0	f	f	394240		2024-05-29 01:18:18.799477	6	268440		 
+            */
+
+
             this.logger.debug(
                 `Loaded ${items.length} items in ${new Date().getTime() - date.getTime()}ms`
             )
@@ -102,11 +119,7 @@ export class ImportModule implements OnModuleInit {
             const values = []
 
             for await (const item of items) {
-
-                const buf = Buffer.alloc(4)
-                buf.writeInt32BE(item.paintwear, 0)
-                const float = buf.readFloatBE(0)
-
+                const float = this.convertWearValue(item.paintwear)
                 const props = this.extractProperties(item.props)
                 const date = new Date(item.updated)
                     .toISOString()
@@ -118,16 +131,16 @@ export class ImportModule implements OnModuleInit {
                 const uniqueId = this.generateUniqueId({
                     paintSeed: item.paintseed,
                     paintIndex: item.paintindex,
-                    paintWear: item.paintwear,
+                    paintWear: float,
                     defIndex: item.defindex,
                     origin: props.origin,
-                    rarity: props.rarity,
+                    rarity: item.rarity,
                     quality: props.quality,
-                    dropReason: item.reason
+                    dropReason: props.origin,
                 });
 
                 values.push(
-                    `(${uniqueId}, ${this.signedToUn(item.ms)}, ${item.a}, ${item.d ? "'" + this.signedToUn(item.d) + "'" : 'NULL'
+                    `('${uniqueId}', ${this.signedToUn(item.ms)}, ${item.a}, ${item.d ? "'" + this.signedToUn(item.d) + "'" : 'NULL'
                     }, ${item.paintseed}, ${float}, ${item.defindex}, ${item.paintindex
                     }, ${item.stattrak === '1' ? true : false}, ${item.souvenir === '1' ? true : false
                     }, ${convertedStickers
@@ -139,20 +152,17 @@ export class ImportModule implements OnModuleInit {
                 lastid = item.floatid
             }
 
+            // Save lastid to file
+            if (process.env.LAST_ID_FILE) {
+                await fs.writeFile(process.env.LAST_ID_FILE, lastid.toString());
+            }
+
             if (values.length) {
                 bulks.push(values)
             }
 
             if (bulks.length === 10) {
-                await Promise.all(
-                    bulks
-                        .filter(Boolean)
-                        .map((bulk) =>
-                            this.toDataSource.query(
-                                `INSERT INTO "asset" (unique_id, ms, asset_id, d, paint_seed, paint_wear, def_index, paint_index, is_stattrak, is_souvenir, stickers, created_at, rarity, quality, origin, custom_name, quest_id, reason, music_index, ent_index, keychains, killeater_score_type, killeater_value, pet_index, inventory) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`
-                            )
-                        )
-                )
+                await this.importBulks(bulks)
 
                 bulks.length = 0
                 this.logger.debug('Imported offset:' + offset)
@@ -161,9 +171,25 @@ export class ImportModule implements OnModuleInit {
             offset += this.limit
         }
 
-        // Rest of the code remains the same...
+        if (bulks.length) {
+            await this.importBulks(bulks)
+        }
     }
 
+    private async importBulks(bulks: Array<Array<string>>) {
+        await Promise.all(
+            bulks
+                .filter(Boolean)
+                .map((bulk) =>
+                    this.toDataSource.query(
+                        `INSERT INTO "asset" (unique_id, ms, asset_id, d, paint_seed, paint_wear, def_index, paint_index, is_stattrak, is_souvenir, stickers, created_at, rarity, quality, origin, custom_name, quest_id, reason, music_index, ent_index, keychains, killeater_score_type, killeater_value, pet_index, inventory) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`
+                    )
+                )
+        )
+    }
+
+
+    /*
     // not working yet
     private async importHistory() {
         const count = await this.fromDataSource.query(
@@ -176,14 +202,23 @@ export class ImportModule implements OnModuleInit {
         const bulks = []
         let lastid = 0
 
-        // Recover last id
-        const lastIdQuery = await this.toDataSource.query(
-            'SELECT id FROM "history" ORDER BY id DESC LIMIT 1'
-        )
+        // Try to load last id from file first
+        try {
+            if (process.env.LAST_ID_FILE) {
+                const savedId = await fs.readFile(process.env.LAST_ID_FILE, 'utf8');
+                lastid = parseInt(savedId, 10);
+                this.logger.debug('Loaded last id from file: ' + lastid);
+            }
+        } catch (error) {
+            // If file doesn't exist or has invalid content, fall back to database
+            const lastIdQuery = await this.toDataSource.query(
+                'SELECT id FROM "history" ORDER BY id DESC LIMIT 1'
+            )
 
-        if (lastIdQuery.length > 0) {
-            this.logger.debug('Last id: ' + lastIdQuery[0].id)
-            lastid = lastIdQuery[0].id
+            if (lastIdQuery.length > 0) {
+                this.logger.debug('Last id from DB: ' + lastIdQuery[0].id)
+                lastid = lastIdQuery[0].id
+            }
         }
 
         while (offset < count[0].count) {
@@ -220,6 +255,11 @@ export class ImportModule implements OnModuleInit {
                 lastid = item.id
             }
 
+            // Save lastid to file
+            if (process.env.LAST_ID_FILE) {
+                await fs.writeFile(process.env.LAST_ID_FILE, lastid.toString());
+            }
+
             if (values.length) {
                 bulks.push(values)
             }
@@ -242,6 +282,7 @@ export class ImportModule implements OnModuleInit {
             offset += this.limit
         }
     }
+    */
 
     /**
      * Generate a unique ID for an asset

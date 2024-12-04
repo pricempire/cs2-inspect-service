@@ -60,6 +60,7 @@ accounts.txt
 accounts2.txt
 
 blacklist.txt
+lastid.txt
 
 sessions
 sessions/*
