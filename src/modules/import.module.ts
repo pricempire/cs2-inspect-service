@@ -143,16 +143,7 @@ export class ImportModule implements OnModuleInit {
                 maxId = Math.max(maxId, item.floatid)
             }
 
-            this.logger.log('Importing ' + values.length + ' items')
-
-            if (values.length) {
-                await this.importBulks([values])
-
-                this.logger.log('Imported ' + values.length + ' items')
-                return maxId
-            }
-
-            return null
+            return values;
         }
 
         while (true) {
@@ -160,12 +151,12 @@ export class ImportModule implements OnModuleInit {
                 const batchStartId = lastid + (index * this.limit);
                 return processBatch(batchStartId);
             });
+
             const results = await Promise.all(batchPromises);
 
-            const validResults = results.filter(id => id !== null);
-            if (validResults.length === 0) break;
+            await this.importBulks(results)
 
-            lastid = Math.max(...validResults);
+            lastid = lastid + (this.limit * concurrentBatches)
 
             // Save lastid to file
             if (process.env.LAST_ID_FILE) {
