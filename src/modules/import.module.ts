@@ -102,8 +102,6 @@ export class ImportModule implements OnModuleInit {
                 `SELECT * FROM "items" WHERE floatid > ${lastid} ORDER BY floatid LIMIT ${this.limit}`
             )
 
-            console.log(items)
-
             /*
             ms  a   d   paintseed   paintwear   defindex   paintindex   stattrak    souvenir    props   stickers   updated  rarity  floatid price   listed_price
             76561198021522664	5928367	-8743621595771947940	0	0	1002	0	f	f	394240		2024-05-29 01:14:11.879828	6	174528		
@@ -145,7 +143,7 @@ export class ImportModule implements OnModuleInit {
                     }, ${item.stattrak === '1' ? true : false}, ${item.souvenir === '1' ? true : false
                     }, ${convertedStickers
                         ? "'" + JSON.stringify(convertedStickers) + "'"
-                        : 'NULL'
+                        : '[]'
                     }, '${date}', ${props.rarity}, ${props.quality}, ${props.origin
                     }, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0)`
                 )
