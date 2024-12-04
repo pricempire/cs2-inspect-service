@@ -78,9 +78,8 @@ export class ImportModule implements OnModuleInit {
 
         this.logger.debug('Count of items in items: ' + count[0].count)
 
-        let offset = 0
-        const bulks = []
         let lastid = 0
+        const concurrentBatches = 5 // Number of parallel batches
 
         // Try to load last id from file first
         try {
@@ -95,28 +94,23 @@ export class ImportModule implements OnModuleInit {
             this.logger.debug('No last id file found, starting from 0')
         }
 
-        while (offset < count[0].count) {
+        // Process batches in parallel
+        const processBatch = async (batchLastId: number) => {
             const date = new Date()
-
             const items = await this.fromDataSource.query(
-                `SELECT * FROM "items" WHERE floatid > ${lastid} ORDER BY floatid LIMIT ${this.limit}`
+                `SELECT * FROM "items" WHERE floatid > ${batchLastId} ORDER BY floatid LIMIT ${this.limit}`
             )
 
-            /*
-            ms  a   d   paintseed   paintwear   defindex   paintindex   stattrak    souvenir    props   stickers   updated  rarity  floatid price   listed_price
-            76561198021522664	5928367	-8743621595771947940	0	0	1002	0	f	f	394240		2024-05-29 01:14:11.879828	6	174528		
-            76561197960604062	2425156	-6015106280277388261	0	0	1003	0	f	f	394240		2024-05-23 10:37:05.276998	6	203697		
-            76561198058765012	36143445191	5398237320703948867	0	0	1001	0	f	f	394240		2024-05-29 01:18:18.799477	6	268440		 
-            */
-
+            if (items.length === 0) return null;
 
             this.logger.debug(
                 `Loaded ${items.length} items in ${new Date().getTime() - date.getTime()}ms`
             )
 
             const values = []
+            let maxId = batchLastId
 
-            for await (const item of items) {
+            for (const item of items) {
                 const float = this.convertWearValue(item.paintwear)
                 const props = this.extractProperties(item.props)
                 const date = new Date(item.updated)
@@ -125,7 +119,6 @@ export class ImportModule implements OnModuleInit {
                     .replace('Z', '')
 
                 const convertedStickers = this.convertStickers(item.stickers)
-
                 const uniqueId = this.generateUniqueId({
                     paintSeed: item.paintseed,
                     paintIndex: item.paintindex,
@@ -147,30 +140,35 @@ export class ImportModule implements OnModuleInit {
                     }, '${date}', ${props.rarity}, ${props.quality}, ${props.origin
                     }, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0)`
                 )
-                lastid = item.floatid
+                maxId = Math.max(maxId, item.floatid)
             }
+
+            if (values.length) {
+                await this.importBulks([values])
+                return maxId
+            }
+
+            return null
+        }
+
+        while (true) {
+            const batchPromises = Array(concurrentBatches).fill(null).map((_, index) => {
+                const batchStartId = lastid + (index * this.limit);
+                return processBatch(batchStartId);
+            });
+            const results = await Promise.all(batchPromises);
+
+            const validResults = results.filter(id => id !== null);
+            if (validResults.length === 0) break;
+
+            lastid = Math.max(...validResults);
 
             // Save lastid to file
             if (process.env.LAST_ID_FILE) {
                 await fs.writeFile(process.env.LAST_ID_FILE, lastid.toString());
             }
 
-            if (values.length) {
-                bulks.push(values)
-            }
-
-            if (bulks.length === 10) {
-                await this.importBulks(bulks)
-
-                bulks.length = 0
-                this.logger.debug('Imported offset:' + offset)
-            }
-
-            offset += this.limit
-        }
-
-        if (bulks.length) {
-            await this.importBulks(bulks)
+            this.logger.debug(`Processed up to ID: ${lastid}`);
         }
     }
 
