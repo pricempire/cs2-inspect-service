@@ -143,8 +143,14 @@ export class ImportModule implements OnModuleInit {
                 maxId = Math.max(maxId, item.floatid)
             }
 
+            this.logger.log('Importing ' + values.length + ' items')
+
             if (values.length) {
-                await this.importBulks([values])
+                await this.toDataSource.query(
+                    `INSERT INTO "asset" (unique_id, ms, asset_id, d, paint_seed, paint_wear, def_index, paint_index, is_stattrak, is_souvenir, stickers, created_at, rarity, quality, origin, custom_name, quest_id, reason, music_index, ent_index, keychains, killeater_score_type, killeater_value, pet_index, inventory) VALUES ${values.join(',')} ON CONFLICT DO NOTHING`
+                )
+
+                this.logger.log('Imported ' + values.length + ' items')
                 return maxId
             }
 
@@ -171,19 +177,6 @@ export class ImportModule implements OnModuleInit {
             this.logger.debug(`Processed up to ID: ${lastid}`);
         }
     }
-
-    private async importBulks(bulks: Array<Array<string>>) {
-        await Promise.all(
-            bulks
-                .filter(Boolean)
-                .map((bulk) =>
-                    this.toDataSource.query(
-                        `INSERT INTO "asset" (unique_id, ms, asset_id, d, paint_seed, paint_wear, def_index, paint_index, is_stattrak, is_souvenir, stickers, created_at, rarity, quality, origin, custom_name, quest_id, reason, music_index, ent_index, keychains, killeater_score_type, killeater_value, pet_index, inventory) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`
-                    )
-                )
-        )
-    }
-
 
     /*
     // not working yet
