@@ -143,8 +143,12 @@ export class ImportModule implements OnModuleInit {
                 maxId = Math.max(maxId, item.floatid)
             }
 
+            this.logger.log('Importing ' + values.length + ' items')
+
             if (values.length) {
                 await this.importBulks([values])
+
+                this.logger.log('Imported ' + values.length + ' items')
                 return maxId
             }
 
