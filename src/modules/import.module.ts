@@ -136,7 +136,7 @@ export class ImportModule implements OnModuleInit {
                     }, ${item.stattrak === '1' ? true : false}, ${item.souvenir === '1' ? true : false
                     }, ${convertedStickers
                         ? "'" + JSON.stringify(convertedStickers) + "'"
-                        : 'NULL'
+                        : "'[]'"
                     }, '${date}', ${props.rarity}, ${props.quality}, ${props.origin
                     }, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0)`
                 )
