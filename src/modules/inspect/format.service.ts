@@ -234,17 +234,17 @@ export class FormatService implements OnModuleInit {
                 paintseed: meta.paintSeed,
                 wear_name: meta.wear,
                 market_hash_name: this.buildMarketHashName(weapon, paint, meta),
-                stickers: asset.stickers.map((sticker) => ({
+                stickers: asset.stickers?.map((sticker) => ({
                     ...sticker,
                     slot: sticker.slot,
                     sticker_id: sticker.sticker_id,
                     wear: sticker.wear,
                     market_hash_name: this.schema.stickers[sticker.sticker_id].market_hash_name,
-                })),
-                keychains: asset.keychains.map((keychain) => ({
+                })) ?? [],
+                keychains: asset.keychains?.map((keychain) => ({
                     ...keychain,
                     market_hash_name: this.schema.keychains[keychain.sticker_id].market_hash_name,
-                })),
+                })) ?? [],
                 image: paint?.image,
                 type: 'Weapon',
                 rank: meta.rank,
