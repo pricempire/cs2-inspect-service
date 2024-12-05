@@ -68,5 +68,6 @@ export interface FormattedResponse {
         min?: number;
         max?: number;
         phase?: string;
+        pattern?: string;
     };
 } 

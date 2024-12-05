@@ -12,6 +12,7 @@ import { Asset } from 'src/entities/asset.entity'
 import { Rankings } from 'src/views/rankings.view'
 import { Repository } from 'typeorm'
 import { Schema, FormattedResponse, Metadata, Paint } from './interfaces/schema.interface'
+import { getPatternName } from 'src/constants'
 
 enum ItemDefIndex {
     Sticker = 1209,
@@ -223,6 +224,7 @@ export class FormatService implements OnModuleInit {
         const weapon = this.schema.weapons[asset.defIndex]
         const paint = this.getPaint(weapon.paints, asset.paintIndex)
 
+        const marketHashName = this.buildMarketHashName(weapon, paint, meta)
         return {
             iteminfo: {
                 defindex: asset.defIndex,
@@ -233,7 +235,7 @@ export class FormatService implements OnModuleInit {
                 floatvalue: asset.paintWear,
                 paintseed: meta.paintSeed,
                 wear_name: meta.wear,
-                market_hash_name: this.buildMarketHashName(weapon, paint, meta),
+                market_hash_name: marketHashName,
                 stickers: asset.stickers?.map((sticker) => ({
                     ...sticker,
                     slot: sticker.slot,
@@ -254,6 +256,7 @@ export class FormatService implements OnModuleInit {
                 min: paint?.min,
                 max: paint?.max,
                 phase: Phase[asset.paintIndex] ?? undefined,
+                pattern: getPatternName(marketHashName, meta.paintSeed),
             },
         }
     }
