@@ -19,6 +19,7 @@ enum ItemDefIndex {
     Graffiti2 = 1348,
     Graffiti = 1349,
     Keychain = 1355,
+    Bomb = 49,
 }
 
 enum WearRange {
@@ -124,11 +125,21 @@ export class FormatService implements OnModuleInit {
             case ItemDefIndex.Keychain:
                 return this.formatKeychain(asset)
 
+            case ItemDefIndex.Bomb:
             default:
                 if (this.schema.agents[asset.defIndex]) {
                     return this.formatAgent(asset)
                 }
-                throw new HttpException('Item not found', HttpStatus.NOT_FOUND)
+                return {
+                    iteminfo: {
+                        defindex: asset.defIndex,
+                        rarity: asset.rarity,
+                        quality: asset.quality,
+                        origin: asset.origin,
+                        type: 'Unknown',
+                        ...asset
+                    },
+                }
         }
     }
 
@@ -214,6 +225,7 @@ export class FormatService implements OnModuleInit {
                 market_hash_name: agent.market_hash_name,
                 image: agent.image,
                 type: 'Agent',
+                /** Patches */
                 stickers: asset.stickers.map((sticker) => ({
                     ...sticker,
                     market_hash_name: this.schema.stickers[sticker.sticker_id].market_hash_name,

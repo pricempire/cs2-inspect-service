@@ -61,7 +61,7 @@ export interface FormattedResponse {
         graffiti_id?: number;
         stattrak?: boolean;
         image?: string;
-        type: 'Weapon' | 'Sticker' | 'Graffiti' | 'Agent' | 'Keychain';
+        type: 'Weapon' | 'Sticker' | 'Graffiti' | 'Agent' | 'Keychain' | 'Unknown';
         rank?: number;
         total_count?: number;
         stickers?: StickerKeychain[];
