@@ -123,6 +123,7 @@ export class FormatService implements OnModuleInit {
                 return this.formatGraffiti(asset)
             case ItemDefIndex.Keychain:
                 return this.formatKeychain(asset)
+
             default:
                 if (this.schema.agents[asset.defIndex]) {
                     return this.formatAgent(asset)

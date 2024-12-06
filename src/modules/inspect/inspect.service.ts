@@ -19,7 +19,6 @@ import { Cron } from '@nestjs/schedule'
 import { InspectDto } from './inspect.dto'
 import { Bot } from './bot.class'
 import { createHash } from 'crypto'
-
 @Injectable()
 export class InspectService implements OnModuleInit {
     private readonly logger = new Logger(InspectService.name)
@@ -40,6 +39,7 @@ export class InspectService implements OnModuleInit {
         timeoutId: NodeJS.Timeout
         startTime?: number
         retryCount?: number
+        inspectUrl?: { s: string, a: string, d: string, m: string }
     }> = new Map()
 
     private nextBot = 0
@@ -359,6 +359,7 @@ export class InspectService implements OnModuleInit {
                     timeoutId,
                     startTime: Date.now(),
                     retryCount,
+                    inspectUrl: { s, a, d, m },
                 })
 
                 try {
@@ -471,6 +472,7 @@ export class InspectService implements OnModuleInit {
             this.logger.error(`Failed to handle inspect result: ${error.message}`);
 
             console.log(response);
+            console.log(inspectData.inspectUrl);
 
             // Only increment failed counter once
             if (!(error instanceof HttpException) || error.getStatus() !== HttpStatus.NOT_FOUND) {
