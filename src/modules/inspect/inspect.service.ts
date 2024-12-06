@@ -48,6 +48,12 @@ export class InspectService implements OnModuleInit {
     private success = 0
     private cached = 0
     private failed = 0
+    private timeouts = 0
+
+    private readonly HEALTH_CHECK_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+    private readonly MIN_BOT_RATIO = 0.7; // 70% minimum active bots
+    private lastHealthyTime: number = Date.now();
+    private isRecovering: boolean = false;
 
     constructor(
         private parseService: ParseService,
@@ -251,18 +257,22 @@ export class InspectService implements OnModuleInit {
             },
             metrics: {
                 success: {
-                    rate: ((this.success / (this.success + this.failed + this.cached)) * 100).toFixed(2) + '%',
+                    rate: ((this.success / (this.success + this.failed + this.cached + this.timeouts)) * 100).toFixed(2) + '%',
                     count: this.success,
                 },
                 cached: {
-                    rate: ((this.cached / (this.success + this.failed + this.cached)) * 100).toFixed(2) + '%',
+                    rate: ((this.cached / (this.success + this.failed + this.cached + this.timeouts)) * 100).toFixed(2) + '%',
                     count: this.cached,
                 },
                 failed: {
-                    rate: ((this.failed / (this.success + this.failed + this.cached)) * 100).toFixed(2) + '%',
+                    rate: ((this.failed / (this.success + this.failed + this.cached + this.timeouts)) * 100).toFixed(2) + '%',
                     count: this.failed,
                 },
-                total: this.success + this.failed + this.cached
+                timeouts: {
+                    rate: ((this.timeouts / (this.success + this.failed + this.cached + this.timeouts)) * 100).toFixed(2) + '%',
+                    count: this.timeouts,
+                },
+                total: this.success + this.failed + this.cached + this.timeouts
             },
             requests: {
                 history: this.requests,
@@ -275,12 +285,14 @@ export class InspectService implements OnModuleInit {
     }
 
     public async inspectItem(query: InspectDto) {
-        // if (this.bots.size === 0) {
-        //     throw new HttpException(
-        //         'Service is still initializing, please try again later',
-        //         HttpStatus.SERVICE_UNAVAILABLE
-        //     )
-        // }
+        // Add check for minimum required bots
+        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
+        if (readyBots === 0) {
+            throw new HttpException(
+                'No inspection bots are currently available. Please try again later.',
+                HttpStatus.SERVICE_UNAVAILABLE
+            );
+        }
 
         if (this.inspects.size >= this.MAX_QUEUE_SIZE) {
             throw new HttpException(
@@ -328,7 +340,7 @@ export class InspectService implements OnModuleInit {
                         await attemptInspection(retryCount + 1)
                     } else {
                         this.inspects.delete(a)
-                        this.failed++
+                        this.timeouts++
                         reject(new HttpException('Inspection request timed out after retries', HttpStatus.GATEWAY_TIMEOUT))
                     }
                 }, this.QUEUE_TIMEOUT)
@@ -456,9 +468,22 @@ export class InspectService implements OnModuleInit {
             inspectData.resolve(formattedResponse)
             return formattedResponse
         } catch (error) {
-            this.logger.error(`Failed to handle inspect result: ${error.message}`)
-            this.failed++
-            inspectData.reject(new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR))
+            this.logger.error(`Failed to handle inspect result: ${error.message}`);
+
+            // Only increment failed counter once
+            if (!(error instanceof HttpException) || error.getStatus() !== HttpStatus.NOT_FOUND) {
+                this.failed++;
+            }
+
+            // Standardize error response
+            const httpException = error instanceof HttpException
+                ? error
+                : new HttpException(
+                    error.message || 'Internal server error',
+                    HttpStatus.INTERNAL_SERVER_ERROR
+                );
+
+            inspectData.reject(httpException);
         } finally {
             if (inspectData.timeoutId) {
                 clearTimeout(inspectData.timeoutId)
@@ -664,6 +689,82 @@ export class InspectService implements OnModuleInit {
                 this.throttledAccounts.delete(username);
                 this.logger.debug(`Removed ${username} from throttle list`);
             }
+        }
+    }
+
+    @Cron('*/1 * * * *') // Run every minute
+    private async checkBotsHealth() {
+        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
+        const busyBots = Array.from(this.bots.values()).filter(bot => bot.isBusy()).length;
+        const cooldownBots = Array.from(this.bots.values()).filter(bot => bot.isCooldown()).length;
+        const errorBots = Array.from(this.bots.values()).filter(bot => bot.isError()).length;
+        const disconnectedBots = Array.from(this.bots.values()).filter(bot => bot.isDisconnected()).length;
+
+        const totalBots = this.bots.size;
+        const expectedBots = this.accounts.length;
+
+        // Consider both ready and temporarily occupied (busy/cooldown) bots as "active"
+        const activeBots = readyBots + busyBots + cooldownBots;
+        const botRatio = activeBots / expectedBots;
+        const isBotRatioLow = botRatio < this.MIN_BOT_RATIO;
+
+        // If we have too many error or disconnected bots
+        const problematicBots = errorBots + disconnectedBots;
+        const isHighErrorRate = (problematicBots / totalBots) > 0.3; // More than 30% problematic
+
+        if ((activeBots === 0 || isBotRatioLow || isHighErrorRate) && totalBots > 0) {
+            const timeSinceHealthy = Date.now() - this.lastHealthyTime;
+
+            this.logger.warn(
+                `Unhealthy bot state!\n` +
+                `Ready: ${readyBots}, Busy: ${busyBots}, Cooldown: ${cooldownBots}\n` +
+                `Error: ${errorBots}, Disconnected: ${disconnectedBots}\n` +
+                `Active ratio: ${(botRatio * 100).toFixed(1)}% (${activeBots}/${expectedBots})\n` +
+                `Last healthy: ${Math.floor(timeSinceHealthy / 1000)}s ago`
+            );
+
+            // Only attempt recovery if:
+            // 1. We've been unhealthy for more than the threshold
+            // 2. We're not already recovering
+            // 3. We have accounts configured
+            // 4. We have actual problems (not just temporary busy/cooldown states)
+            const needsRecovery = (
+                activeBots === 0 ||
+                isHighErrorRate ||
+                (isBotRatioLow && (errorBots > 0 || disconnectedBots > 0))
+            );
+
+            if (timeSinceHealthy > this.HEALTH_CHECK_THRESHOLD && !this.isRecovering && this.accounts.length > 0 && needsRecovery) {
+                await this.recoverBots();
+            }
+        } else if (activeBots > 0 && !isBotRatioLow && !isHighErrorRate) {
+            this.lastHealthyTime = Date.now();
+        }
+    }
+
+    private async recoverBots() {
+        try {
+            this.isRecovering = true;
+            this.logger.warn('Starting bot recovery process...');
+
+            // Destroy all existing bots
+            const destroyPromises = Array.from(this.bots.values()).map(bot => bot.destroy());
+            await Promise.allSettled(destroyPromises);
+
+            // Clear the bots map
+            this.bots.clear();
+
+            // Wait a bit before reinitializing
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            // Reinitialize bots
+            await this.initializeAllBots();
+
+            this.logger.log(`Recovery complete. ${this.bots.size} bots reinitialized`);
+        } catch (error) {
+            this.logger.error(`Recovery failed: ${error.message}`);
+        } finally {
+            this.isRecovering = false;
         }
     }
 }
