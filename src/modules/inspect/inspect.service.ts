@@ -248,13 +248,6 @@ export class InspectService implements OnModuleInit {
                 total: totalBots,
                 utilization: (totalBots > 0 ? (busyBots / totalBots) * 100 : 0).toFixed(2) + '%'
             },
-            queue: {
-                current: this.inspects.size,
-                max: this.MAX_QUEUE_SIZE,
-                utilization: queueUtilization.toFixed(2) + '%',
-                avgProcessingTime: Math.round(avgProcessingTime) + 'ms',
-                items: queueItems
-            },
             metrics: {
                 success: {
                     rate: ((this.success / (this.success + this.failed + this.cached + this.timeouts)) * 100).toFixed(2) + '%',
@@ -280,7 +273,14 @@ export class InspectService implements OnModuleInit {
                 average: this.requests.length > 0
                     ? (this.requests.reduce((a, b) => a + b, 0) / this.requests.length).toFixed(2)
                     : 0
-            }
+            },
+            queue: {
+                current: this.inspects.size,
+                max: this.MAX_QUEUE_SIZE,
+                utilization: queueUtilization.toFixed(2) + '%',
+                avgProcessingTime: Math.round(avgProcessingTime) + 'ms',
+                items: queueItems
+            },
         }
     }
 
@@ -340,7 +340,7 @@ export class InspectService implements OnModuleInit {
                         await attemptInspection(retryCount + 1)
                     } else {
                         this.inspects.delete(a)
-                        this.timeouts++
+                        this.failed++
                         reject(new HttpException('Inspection request timed out after retries', HttpStatus.GATEWAY_TIMEOUT))
                     }
                 }, this.QUEUE_TIMEOUT)
