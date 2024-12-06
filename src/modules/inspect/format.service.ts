@@ -266,38 +266,7 @@ export class FormatService implements OnModuleInit {
         if (!paintIndex) return undefined
         return paints[paintIndex.toString()]
     }
-    /*
-        getFullItemName(iteminfo) {
-            let name = '';
 
-            // Default items have the "unique" quality
-            if (iteminfo.quality !== 4) {
-                name += `${iteminfo.quality_name} `;
-            }
-
-            // Patch for items that are stattrak and unusual (ex. Stattrak Karambit)
-            if (iteminfo.killeatervalue !== null && iteminfo.quality !== 9) {
-                name += `${this.csgo_english['strange']} `;
-            }
-
-            name += `${iteminfo.weapon_type} `;
-
-            if (iteminfo.weapon_type === 'Sticker' || iteminfo.weapon_type === 'Sealed Graffiti') {
-                name += `| ${iteminfo.stickers[0].name}`;
-            }
-
-            // Vanilla items have an item_name of '-'
-            if (iteminfo.item_name && iteminfo.item_name !== '-') {
-                name += `| ${iteminfo.item_name} `;
-
-                if (iteminfo.wear_name) {
-                    name += `(${iteminfo.wear_name})`;
-                }
-            }
-
-            return name.trim();
-        }
-    */
     private buildMarketHashName(weapon: any, paint: Paint | undefined, meta: Metadata): string {
         const parts: string[] = []
 
