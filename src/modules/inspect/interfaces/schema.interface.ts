@@ -29,6 +29,7 @@ export interface Metadata {
     origin: number;
     paintSeed: number;
     paintWear: number;
+    killeaterValue?: number;
 }
 
 export interface StickerKeychain {

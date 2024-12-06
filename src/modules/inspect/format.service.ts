@@ -110,6 +110,7 @@ export class FormatService implements OnModuleInit {
             origin: asset.origin,
             paintSeed: asset.paintSeed,
             paintWear: asset.paintWear,
+            killeaterValue: asset.killeaterValue,
         }
     }
 
@@ -252,7 +253,7 @@ export class FormatService implements OnModuleInit {
                 rank: meta.rank,
                 total_count: meta.totalCount,
                 souvenir: meta.quality === 12,
-                stattrak: meta.quality === 9,
+                stattrak: meta.killeaterValue !== null,
                 min: paint?.min,
                 max: paint?.max,
                 phase: Phase[asset.paintIndex] ?? undefined,
@@ -265,16 +266,50 @@ export class FormatService implements OnModuleInit {
         if (!paintIndex) return undefined
         return paints[paintIndex.toString()]
     }
+    /*
+        getFullItemName(iteminfo) {
+            let name = '';
 
+            // Default items have the "unique" quality
+            if (iteminfo.quality !== 4) {
+                name += `${iteminfo.quality_name} `;
+            }
+
+            // Patch for items that are stattrak and unusual (ex. Stattrak Karambit)
+            if (iteminfo.killeatervalue !== null && iteminfo.quality !== 9) {
+                name += `${this.csgo_english['strange']} `;
+            }
+
+            name += `${iteminfo.weapon_type} `;
+
+            if (iteminfo.weapon_type === 'Sticker' || iteminfo.weapon_type === 'Sealed Graffiti') {
+                name += `| ${iteminfo.stickers[0].name}`;
+            }
+
+            // Vanilla items have an item_name of '-'
+            if (iteminfo.item_name && iteminfo.item_name !== '-') {
+                name += `| ${iteminfo.item_name} `;
+
+                if (iteminfo.wear_name) {
+                    name += `(${iteminfo.wear_name})`;
+                }
+            }
+
+            return name.trim();
+        }
+    */
     private buildMarketHashName(weapon: any, paint: Paint | undefined, meta: Metadata): string {
         const parts: string[] = []
 
-        if (meta.defIndex >= 500) {
+        if (meta.quality === 3) {
             parts.push('★')
         }
 
-        if (meta.quality === 9) parts.push('StatTrak™')
-        if (meta.quality === 12) parts.push('Souvenir')
+        if (meta.killeaterValue !== null) {
+            parts.push('StatTrak™')
+        } else if (meta.quality === 12) {
+            parts.push('Souvenir')
+        }
 
         parts.push(weapon.name)
 
@@ -314,7 +349,7 @@ export class FormatService implements OnModuleInit {
         if (meta.wear && paint /** make sure it wont add to the vanilla paint */) parts.push(`(${meta.wear})`)
         if (phase) parts.push(`- ${phase}`)
 
-        return parts.join(' ')
+        return parts.join(' ').trim();
     }
 
     private getWear(wear: number): string {
