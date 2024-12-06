@@ -470,6 +470,8 @@ export class InspectService implements OnModuleInit {
         } catch (error) {
             this.logger.error(`Failed to handle inspect result: ${error.message}`);
 
+            console.log(response);
+
             // Only increment failed counter once
             if (!(error instanceof HttpException) || error.getStatus() !== HttpStatus.NOT_FOUND) {
                 this.failed++;
