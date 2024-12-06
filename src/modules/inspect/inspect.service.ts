@@ -346,7 +346,7 @@ export class InspectService implements OnModuleInit {
                 }, this.QUEUE_TIMEOUT)
 
                 this.inspects.set(a, {
-                    ms: m !== '0' ? m : s,
+                    ms: m !== '0' && m ? m : s,
                     d,
                     resolve: (value: any) => {
                         clearTimeout(timeoutId)

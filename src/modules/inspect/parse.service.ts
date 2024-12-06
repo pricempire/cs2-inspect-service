@@ -17,12 +17,10 @@ export class ParseService {
             return params
         }
 
-
-        // we need a,d,s or m
-
         if (!('a' in query && 'd' in query && ('s' in query || 'm' in query))) {
             throw new HttpException('Invalid query', 400)
         }
+
         return {
             s: query.s,
             a: query.a,
