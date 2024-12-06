@@ -50,7 +50,7 @@ export class InspectService implements OnModuleInit {
     private failed = 0
     private timeouts = 0
 
-    private readonly HEALTH_CHECK_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+    private readonly HEALTH_CHECK_THRESHOLD = 15 * 60 * 1000; // 15 minutes
     private readonly MIN_BOT_RATIO = 0.7; // 70% minimum active bots
     private lastHealthyTime: number = Date.now();
     private isRecovering: boolean = false;
