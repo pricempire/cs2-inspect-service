@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm'
 import { createHash } from 'crypto'
 import 'dotenv/config'
 import { promises as fs } from 'fs'
+import { HistoryType } from 'src/entities/history.entity'
 
 @Module({
     imports: [
@@ -39,9 +40,12 @@ export class ImportModule implements OnModuleInit {
     async onModuleInit() {
         this.logger.debug('Importing data from source to target')
 
-        setTimeout(() => {
-            this.import()
+        /*
+        setTimeout(async () => {
+            await this.import()
+            // await this.rebuildHistory()
         }, 5000)
+        */
     }
 
     private convertStickers(oldStickers: Array<{ d?: number, i: number, s: number, w: number }>) {
@@ -178,100 +182,111 @@ export class ImportModule implements OnModuleInit {
         }
     }
 
-    /*
-    // not working yet
-    private async importHistory() {
-        const count = await this.fromDataSource.query(
-            'SELECT COUNT(id) FROM "history"'
-        )
+    private async rebuildHistory() {
+        this.logger.debug('Rebuilding history')
 
-        this.logger.debug('Count of items in history: ' + count[0].count)
+        // First, clear existing history
+        await this.toDataSource.query('TRUNCATE TABLE history')
 
-        let offset = 0
-        const bulks = []
-        let lastid = 0
+        // Insert all history entries using a single SQL query
+        await this.toDataSource.query(`
+            WITH ranked_assets AS (
+                SELECT 
+                    *,
+                    LAG(asset_id) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_asset_id,
+                    LAG(ms) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_owner,
+                    LAG(stickers) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_stickers,
+                    LAG(keychains) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_keychains,
+                    LAG(custom_name) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_custom_name,
+                    LAG(inventory) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_inventory,
+                    LAG(created_at) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_created_at,
+                    CASE
+                        -- Initial state based on origin (Item Source Events)
+                        WHEN LAG(asset_id) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NULL THEN
+                            CASE 
+                                WHEN origin = 1 THEN 12  -- UNBOXED
+                                WHEN origin = 2 THEN 13  -- CRAFTED
+                                WHEN origin = 3 THEN 14  -- TRADED_UP
+                                WHEN origin = 4 THEN 15  -- PURCHASED_INGAME
+                                ELSE 16                  -- DROPPED
+                            END
+                        -- Check for time gap (more than 2 months)
+                        WHEN LAG(created_at) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NOT NULL 
+                            AND created_at - LAG(created_at) OVER (PARTITION BY unique_id ORDER BY asset_id) > INTERVAL '3 months' 
+                            THEN 99  -- UNKNOWN due to time gap
+                        ELSE
+                            CASE
+                                -- Trading & Market Events
+                                WHEN ms != LAG(ms) OVER (PARTITION BY unique_id ORDER BY asset_id) THEN
+                                    CASE
+                                        -- Current owner is market (not starting with 7656)
+                                        WHEN ms::text NOT LIKE '7656%' THEN 4  -- MARKET_LISTING
+                                        -- Previous owner was market
+                                        WHEN LAG(ms) OVER (PARTITION BY unique_id ORDER BY asset_id)::text NOT LIKE '7656%' THEN 5  -- MARKET_BUY
+                                        -- Both are user IDs (starting with 7656)
+                                        ELSE 1  -- TRADE
+                                    END
 
-        // Try to load last id from file first
-        try {
-            if (process.env.LAST_ID_FILE) {
-                const savedId = await fs.readFile(process.env.LAST_ID_FILE, 'utf8');
-                lastid = parseInt(savedId, 10);
-                this.logger.debug('Loaded last id from file: ' + lastid);
-            }
-        } catch (error) {
-            // If file doesn't exist or has invalid content, fall back to database
-            const lastIdQuery = await this.toDataSource.query(
-                'SELECT id FROM "history" ORDER BY id DESC LIMIT 1'
+                                -- Sticker Events
+                                WHEN stickers IS NOT NULL AND LAG(stickers) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NULL 
+                                    THEN 8   -- STICKER_APPLY
+                                WHEN stickers IS NULL AND LAG(stickers) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NOT NULL 
+                                    THEN 9   -- STICKER_REMOVE
+                                WHEN stickers != LAG(stickers) OVER (PARTITION BY unique_id ORDER BY asset_id) THEN
+                                    CASE
+                                        WHEN jsonb_array_length(stickers::jsonb) < jsonb_array_length(LAG(stickers) OVER (PARTITION BY unique_id ORDER BY asset_id)::jsonb)
+                                            THEN 11  -- STICKER_SCRAPE
+                                        ELSE 10      -- STICKER_CHANGE
+                                    END
+
+                                -- Keychain Events
+                                WHEN keychains IS NOT NULL AND LAG(keychains) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NULL 
+                                    THEN 19  -- KEYCHAIN_ADDED
+                                WHEN keychains IS NULL AND LAG(keychains) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NOT NULL 
+                                    THEN 20  -- KEYCHAIN_REMOVED
+                                WHEN keychains != LAG(keychains) OVER (PARTITION BY unique_id ORDER BY asset_id) 
+                                    THEN 21  -- KEYCHAIN_CHANGED
+
+                                -- Name Tag Events
+                                WHEN custom_name IS NOT NULL AND LAG(custom_name) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NULL 
+                                    THEN 17  -- NAMETAG_ADDED
+                                WHEN custom_name IS NULL AND LAG(custom_name) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NOT NULL 
+                                    THEN 18  -- NAMETAG_REMOVED
+
+                                -- Storage Unit Events
+                                WHEN inventory = -1 AND LAG(inventory) OVER (PARTITION BY unique_id ORDER BY asset_id) != -1 
+                                    THEN 22  -- STORAGE_UNIT_STORED
+                                WHEN inventory != -1 AND LAG(inventory) OVER (PARTITION BY unique_id ORDER BY asset_id) = -1 
+                                    THEN 23  -- STORAGE_UNIT_RETRIEVED
+
+                                ELSE 99  -- UNKNOWN
+                            END
+                    END as history_type
+                FROM asset
             )
-
-            if (lastIdQuery.length > 0) {
-                this.logger.debug('Last id from DB: ' + lastIdQuery[0].id)
-                lastid = lastIdQuery[0].id
-            }
-        }
-
-        while (offset < count[0].count) {
-            const date = new Date()
-
-            const items = await this.fromDataSource.query(
-                `SELECT * FROM "history" WHERE id > ${lastid} ORDER BY id LIMIT ${this.limit}`
+            INSERT INTO history (
+                unique_id, asset_id, prev_asset_id, type, owner, prev_owner,
+                d, stickers, prev_stickers, keychains, prev_keychains, created_at
             )
+            SELECT 
+                unique_id,
+                asset_id,
+                prev_asset_id,
+                history_type,
+                ms as owner,
+                prev_owner,
+                d,
+                stickers,
+                prev_stickers,
+                keychains,
+                prev_keychains,
+                created_at
+            FROM ranked_assets
+            ORDER BY unique_id, asset_id
+        `)
 
-            this.logger.debug(
-                `Loaded ${items.length} items in ${new Date().getTime() - date.getTime()}ms`
-            )
-
-            const values = []
-
-            for await (const item of items) {
-                const date = new Date(item.created_at)
-                    .toISOString()
-                    .replace('T', ' ')
-                    .replace('Z', '')
-
-                // Convert old stickers format to new format if they exist
-                const stickers = item.stickers ? this.convertStickers(item.stickers) : null
-                const newStickers = item.stickers_new ? this.convertStickers(item.stickers_new) : null
-
-                values.push(
-                    `(${item.id}, ${item.floatid}, ${item.a}, ${item.type || 'NULL'
-                    }, ${item.steamid}, ${item.current_steamid ? item.current_steamid : 'NULL'
-                    }, ${item.d ? "'" + this.signedToUn(item.d) + "'" : 'NULL'
-                    }, ${stickers ? "'" + JSON.stringify(stickers) + "'" : 'NULL'
-                    }, ${newStickers ? "'" + JSON.stringify(newStickers) + "'" : 'NULL'
-                    }, NULL, NULL, '${date}')`
-                )
-                lastid = item.id
-            }
-
-            // Save lastid to file
-            if (process.env.LAST_ID_FILE) {
-                await fs.writeFile(process.env.LAST_ID_FILE, lastid.toString());
-            }
-
-            if (values.length) {
-                bulks.push(values)
-            }
-
-            if (bulks.length === 10) {
-                await Promise.all(
-                    bulks
-                        .filter(Boolean)
-                        .map((bulk) =>
-                            this.toDataSource.query(
-                                `INSERT INTO "history" (unique_id, asset_id, prev_asset_id, type, owner, prev_owner, d, stickers, prev_stickers, keychains, prev_keychains, created_at) VALUES ${bulk.join(',')} ON CONFLICT DO NOTHING`
-                            )
-                        )
-                )
-
-                bulks.length = 0
-                this.logger.debug('Imported history offset:' + offset)
-            }
-
-            offset += this.limit
-        }
+        this.logger.debug('History rebuild completed')
     }
-    */
 
     /**
      * Generate a unique ID for an asset

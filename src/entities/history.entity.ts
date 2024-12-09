@@ -61,17 +61,16 @@ export enum HistoryType {
 @Entity()
 @Index('history_unique_id', ['uniqueId'])
 @Index('history_asset_tracking', ['assetId', 'prevAssetId'])
-@Index('history_ownership', ['owner', 'prevOwner'])
-@Index('history_timeline', ['createdAt', 'type'])
-@Index('history_details', ['d', 'type'])
+@Index('history_ownership', ['owner', 'prevOwner', 'type', 'createdAt'])
 @Index('history_unique_id_asset_id', ['uniqueId', 'assetId'], { unique: true })
-@Index('history_prev_asset_id', ['prevAssetId'])
-@Index('history_prev_owner', ['prevOwner'])
 export class History {
+    @PrimaryGeneratedColumn()
+    id: number;
+
     @Column()
     uniqueId: string;
 
-    @PrimaryColumn({
+    @Column({
         type: 'bigint',
     })
     assetId: number
@@ -83,7 +82,8 @@ export class History {
     prevAssetId: number
 
     @Column({
-        type: 'smallint',
+        type: 'enum',
+        enum: HistoryType,
     })
     type: HistoryType
 
