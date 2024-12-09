@@ -511,6 +511,7 @@ export class InspectService implements OnModuleInit {
     }
 
     private async saveHistory(response: any, history: any, inspectData: any, uniqueId: string) {
+        /*
         const existing = await this.historyRepository.findOne({
             where: {
                 assetId: parseInt(response.itemid),
@@ -532,6 +533,7 @@ export class InspectService implements OnModuleInit {
                 type: this.getHistoryType(response, history, inspectData),
             }, ['assetId', 'uniqueId'])
         }
+        */
     }
 
     private async saveAsset(response: any, inspectData: any, uniqueId: string) {
