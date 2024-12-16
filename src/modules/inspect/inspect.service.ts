@@ -283,6 +283,8 @@ export class InspectService implements OnModuleInit {
     }
 
     public async inspectItem(query: InspectDto) {
+        this.currentRequests++;
+
         if (this.queueService.isFull()) {
             throw new HttpException(
                 `Queue is full (${this.queueService.size()}/${this.MAX_QUEUE_SIZE}), please try again later`,
@@ -293,7 +295,7 @@ export class InspectService implements OnModuleInit {
         const { s, a, d, m } = this.parseService.parse(query);
 
         // Add debug logging
-        this.logger.debug(`Processing inspect request for asset ${a}`);
+        // this.logger.debug(`Processing inspect request for asset ${a}`);
 
         // Handle cache check
         if (!query.refresh) {
@@ -313,7 +315,7 @@ export class InspectService implements OnModuleInit {
 
                 const timeoutId = setTimeout(async () => {
                     if (retryCount < this.MAX_RETRIES) {
-                        this.logger.debug(`Inspection timeout for asset ${a}, retry ${retryCount + 1}`);
+                        this.logger.error(`Inspection timeout for asset ${a}, retry ${retryCount + 1}`);
                         this.queueService.remove(a);
                         await attemptInspection(retryCount + 1);
                     } else {
@@ -336,7 +338,7 @@ export class InspectService implements OnModuleInit {
                 });
 
                 try {
-                    this.logger.debug(`Sending inspect request for asset ${a} to bot`);
+                    // this.logger.debug(`Sending inspect request for asset ${a} to bot`);
                     await bot.inspectItem(s !== '0' ? s : m, a, d);
                 } catch (error) {
                     this.logger.error(`Bot inspection error for asset ${a}: ${error.message}`);
@@ -409,7 +411,7 @@ export class InspectService implements OnModuleInit {
 
     private async handleInspectResult(username: string, response: any) {
         // Add debug logging
-        this.logger.debug(`Received inspect result for item ${response.itemid} from bot ${username}`);
+        // this.logger.debug(`Received inspect result for item ${response.itemid} from bot ${username}`);
 
         const inspectData = this.queueService.get(response.itemid.toString());  // Ensure string conversion
         if (!inspectData) {
