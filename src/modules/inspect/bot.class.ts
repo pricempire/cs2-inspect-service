@@ -51,6 +51,14 @@ export class Bot extends EventEmitter {
     private cooldownTimeout: NodeJS.Timeout | null = null
     private readonly sessionFile: string
     private refreshToken: string | null = null
+    private inspectCount: number = 0;
+    private successCount: number = 0;
+    private failureCount: number = 0;
+    private lastInspectTime: number | null = null;
+    private errorCount: number = 0;
+    private responseTimes: number[] = [];
+    private startTime: number = Date.now();
+    private cooldownCount: number = 0;
 
     private readonly config: Required<BotConfig>
 
@@ -573,5 +581,65 @@ export class Bot extends EventEmitter {
         const entry = `${this.config.username}:${reason}:${new Date().toISOString()}`
         await fs.appendFile(this.config.blacklistPath, entry + '\n', 'utf8')
         this.log(`Account added to blacklist: ${entry}`)
+    }
+
+    public getInspectCount(): number {
+        return this.inspectCount;
+    }
+
+    public getSuccessCount(): number {
+        return this.successCount;
+    }
+
+    public getFailureCount(): number {
+        return this.failureCount;
+    }
+
+    public getLastInspectTime(): number | null {
+        return this.lastInspectTime;
+    }
+
+    public getErrorCount(): number {
+        return this.errorCount;
+    }
+
+    public getAverageResponseTime(): number {
+        return this.responseTimes.length > 0
+            ? this.responseTimes.reduce((a, b) => a + b, 0) / this.responseTimes.length
+            : 0;
+    }
+
+    public getUptime(): string {
+        const ms = Date.now() - this.startTime
+        const days = Math.floor(ms / (24 * 60 * 60 * 1000))
+        const hours = Math.floor((ms % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000))
+        const minutes = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000))
+        const seconds = Math.floor((ms % (60 * 1000)) / 1000)
+        return `${days}d ${hours}h ${minutes}m ${seconds}s`
+    }
+
+    public getCooldownCount(): number {
+        return this.cooldownCount;
+    }
+
+    public incrementSuccessCount(): void {
+        this.successCount++;
+    }
+
+    public incrementFailureCount(): void {
+        this.failureCount++;
+    }
+
+    public incrementInspectCount(): void {
+        this.inspectCount++;
+        this.lastInspectTime = Date.now();
+    }
+
+    public addResponseTime(time: number): void {
+        this.responseTimes.push(time);
+        // Keep only last 100 response times to avoid memory bloat
+        if (this.responseTimes.length > 100) {
+            this.responseTimes.shift();
+        }
     }
 }

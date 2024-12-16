@@ -211,31 +211,31 @@ export class InspectService implements OnModuleInit {
         const minutes = Math.floor((uptime % (60 * 60 * 1000)) / (60 * 1000))
         const seconds = Math.floor((uptime % (60 * 1000)) / 1000)
 
-        // Calculate average processing time
-        const activeInspects = Array.from(this.inspects.values())
-        const processingTimes = activeInspects
-            .filter(inspect => inspect.startTime)
-            .map(inspect => Date.now() - inspect.startTime)
-        const avgProcessingTime = processingTimes.length > 0
-            ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length
-            : 0
-
-        // Get queue details
-        const queueItems = Array.from(this.inspects.entries()).map(([assetId, inspect]) => ({
-            assetId,
-            elapsedTime: inspect.startTime ? Date.now() - inspect.startTime : 0,
-            retryCount: inspect.retryCount || 0
-        }));
+        // Get detailed bot statistics
+        const botStats = Array.from(this.bots.entries()).map(([username, bot]) => {
+            return {
+                username: username.substring(0, username.length > 13 ? 13 : username.length - 2), // Truncate to 10 characters
+                status: bot.isReady() ? 'ready' :
+                    bot.isBusy() ? 'busy' :
+                        bot.isCooldown() ? 'cooldown' :
+                            bot.isDisconnected() ? 'disconnected' :
+                                bot.isError() ? 'error' : 'initializing',
+                inspectCount: bot.getInspectCount() || 0,
+                successCount: bot.getSuccessCount() || 0,
+                failureCount: bot.getFailureCount() || 0,
+                lastInspectTime: bot.getLastInspectTime() || null,
+                errorCount: bot.getErrorCount() || 0,
+                avgResponseTime: bot.getAverageResponseTime() || 0,
+                uptime: bot.getUptime() || 0,
+                cooldownCount: bot.getCooldownCount() || 0,
+                throttled: this.throttledAccounts.has(username),
+                throttleExpiry: this.throttledAccounts.get(username),
+            }
+        }).sort((a, b) => b.inspectCount - a.inspectCount) // Sort by inspect count
 
         return {
             status: this.bots.size > 0 ? 'ready' : 'initializing',
-            uptime: {
-                days,
-                hours,
-                minutes,
-                seconds,
-                formatted: `${days}d ${hours}h ${minutes}m ${seconds}s`
-            },
+            uptime: `${days}d ${hours}h ${minutes}m ${seconds}s`,
             bots: {
                 ready: readyBots,
                 busy: busyBots,
@@ -244,7 +244,8 @@ export class InspectService implements OnModuleInit {
                 error: errorBots,
                 initializing: initializingBots,
                 total: totalBots,
-                utilization: (totalBots > 0 ? (busyBots / totalBots) * 100 : 0).toFixed(2) + '%'
+                utilization: (totalBots > 0 ? (busyBots / totalBots) * 100 : 0).toFixed(2) + '%',
+                details: botStats
             },
             metrics: {
                 success: {
@@ -276,10 +277,28 @@ export class InspectService implements OnModuleInit {
                 current: this.inspects.size,
                 max: this.MAX_QUEUE_SIZE,
                 utilization: queueUtilization.toFixed(2) + '%',
-                avgProcessingTime: Math.round(avgProcessingTime) + 'ms',
-                items: queueItems
-            },
+                avgProcessingTime: Math.round(this.getAverageProcessingTime()) + 'ms',
+                items: this.getQueueItems()
+            }
         }
+    }
+
+    private getAverageProcessingTime(): number {
+        const activeInspects = Array.from(this.inspects.values())
+        const processingTimes = activeInspects
+            .filter(inspect => inspect.startTime)
+            .map(inspect => Date.now() - inspect.startTime)
+        return processingTimes.length > 0
+            ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length
+            : 0
+    }
+
+    private getQueueItems() {
+        return Array.from(this.inspects.entries()).map(([assetId, inspect]) => ({
+            assetId,
+            elapsedTime: inspect.startTime ? Date.now() - inspect.startTime : 0,
+            retryCount: inspect.retryCount || 0
+        }))
     }
 
     public async inspectItem(query: InspectDto) {
@@ -410,17 +429,19 @@ export class InspectService implements OnModuleInit {
     }
 
     private async handleInspectResult(username: string, response: any) {
-        // Add debug logging
-        // this.logger.debug(`Received inspect result for item ${response.itemid} from bot ${username}`);
+        const bot = this.bots.get(username);
+        if (!bot) return;
 
-        const inspectData = this.queueService.get(response.itemid.toString());  // Ensure string conversion
+        const inspectData = this.queueService.get(response.itemid.toString());
         if (!inspectData) {
-            this.logger.error(`No inspect data found for item ${response.itemid}. Queue size: ${this.queueService.size()}`);
-            this.logger.debug(`Current queue items: ${JSON.stringify(Array.from(this.queueService.getQueueMetrics().items))}`);
+            this.logger.error(`No inspect data found for item ${response.itemid}`);
             return;
         }
 
         try {
+            // Start timing the response
+            const startTime = Date.now();
+
             const uniqueId = this.generateUniqueId({
                 paintSeed: response.paintseed,
                 paintIndex: response.paintindex,
@@ -438,10 +459,18 @@ export class InspectService implements OnModuleInit {
             const asset = await this.saveAsset(response, inspectData, uniqueId);
 
             const formattedResponse = await this.formatService.formatResponse(asset);
-            this.success++;
 
+            // Increment success counters and track response time
+            bot.incrementSuccessCount();
+            bot.incrementInspectCount();
+            bot.addResponseTime(Date.now() - startTime);
+
+            this.success++;
             inspectData.resolve(formattedResponse);
         } catch (error) {
+            // Increment failure counter
+            bot.incrementFailureCount();
+
             this.logger.error(`Failed to handle inspect result: ${error.message}`);
             if (!(error instanceof HttpException)) {
                 this.failed++;
@@ -451,7 +480,7 @@ export class InspectService implements OnModuleInit {
             if (inspectData.timeoutId) {
                 clearTimeout(inspectData.timeoutId);
             }
-            this.queueService.remove(response.itemid.toString());  // Ensure string conversion
+            this.queueService.remove(response.itemid.toString());
         }
     }
 
