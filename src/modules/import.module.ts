@@ -185,84 +185,82 @@ export class ImportModule implements OnModuleInit {
     private async rebuildHistory() {
         this.logger.debug('Rebuilding history')
 
-        // First, clear existing history
-        await this.toDataSource.query('TRUNCATE TABLE history')
-
         // Insert all history entries using a single SQL query
         await this.toDataSource.query(`
+            BEGIN;
+
+            -- First, clear existing history
+            TRUNCATE TABLE history;
+
+            -- Insert all history entries
             WITH ranked_assets AS (
                 SELECT 
-                    *,
+                    a.*,
                     LAG(asset_id) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_asset_id,
                     LAG(ms) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_owner,
                     LAG(stickers) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_stickers,
                     LAG(keychains) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_keychains,
                     LAG(custom_name) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_custom_name,
                     LAG(inventory) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_inventory,
-                    LAG(created_at) OVER (PARTITION BY unique_id ORDER BY asset_id) as prev_created_at,
-                    CASE
+                    (CASE
                         -- Initial state based on origin (Item Source Events)
                         WHEN LAG(asset_id) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NULL THEN
                             CASE 
-                                WHEN origin = 1 THEN 12  -- UNBOXED
-                                WHEN origin = 2 THEN 13  -- CRAFTED
-                                WHEN origin = 3 THEN 14  -- TRADED_UP
-                                WHEN origin = 4 THEN 15  -- PURCHASED_INGAME
-                                ELSE 16                  -- DROPPED
+                                WHEN origin = 1 THEN '12'  -- UNBOXED
+                                WHEN origin = 2 THEN '13'  -- CRAFTED
+                                WHEN origin = 3 THEN '14'  -- TRADED_UP
+                                WHEN origin = 4 THEN '15'  -- PURCHASED_INGAME
+                                ELSE '16'  -- DROPPED
                             END
-                        -- Check for time gap (more than 2 months)
-                        WHEN LAG(created_at) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NOT NULL 
-                            AND created_at - LAG(created_at) OVER (PARTITION BY unique_id ORDER BY asset_id) > INTERVAL '3 months' 
-                            THEN 99  -- UNKNOWN due to time gap
                         ELSE
                             CASE
                                 -- Trading & Market Events
                                 WHEN ms != LAG(ms) OVER (PARTITION BY unique_id ORDER BY asset_id) THEN
                                     CASE
                                         -- Current owner is market (not starting with 7656)
-                                        WHEN ms::text NOT LIKE '7656%' THEN 4  -- MARKET_LISTING
+                                        WHEN ms::text NOT LIKE '7656%' THEN '4'  -- MARKET_LISTING
                                         -- Previous owner was market
-                                        WHEN LAG(ms) OVER (PARTITION BY unique_id ORDER BY asset_id)::text NOT LIKE '7656%' THEN 5  -- MARKET_BUY
+                                        WHEN LAG(ms) OVER (PARTITION BY unique_id ORDER BY asset_id)::text NOT LIKE '7656%' THEN '5'  -- MARKET_BUY
                                         -- Both are user IDs (starting with 7656)
-                                        ELSE 1  -- TRADE
+                                        ELSE '1'  -- TRADE
                                     END
 
                                 -- Sticker Events
                                 WHEN stickers IS NOT NULL AND LAG(stickers) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NULL 
-                                    THEN 8   -- STICKER_APPLY
+                                    THEN '8'   -- STICKER_APPLY
                                 WHEN stickers IS NULL AND LAG(stickers) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NOT NULL 
-                                    THEN 9   -- STICKER_REMOVE
+                                    THEN '9'   -- STICKER_REMOVE
                                 WHEN stickers != LAG(stickers) OVER (PARTITION BY unique_id ORDER BY asset_id) THEN
                                     CASE
                                         WHEN jsonb_array_length(stickers::jsonb) < jsonb_array_length(LAG(stickers) OVER (PARTITION BY unique_id ORDER BY asset_id)::jsonb)
-                                            THEN 11  -- STICKER_SCRAPE
-                                        ELSE 10      -- STICKER_CHANGE
+                                            THEN '11'  -- STICKER_SCRAPE
+                                        ELSE '10'      -- STICKER_CHANGE
                                     END
 
                                 -- Keychain Events
                                 WHEN keychains IS NOT NULL AND LAG(keychains) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NULL 
-                                    THEN 19  -- KEYCHAIN_ADDED
+                                    THEN '19'  -- KEYCHAIN_ADDED
                                 WHEN keychains IS NULL AND LAG(keychains) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NOT NULL 
-                                    THEN 20  -- KEYCHAIN_REMOVED
+                                    THEN '20'  -- KEYCHAIN_REMOVED
                                 WHEN keychains != LAG(keychains) OVER (PARTITION BY unique_id ORDER BY asset_id) 
-                                    THEN 21  -- KEYCHAIN_CHANGED
+                                    THEN '21'  -- KEYCHAIN_CHANGED
 
                                 -- Name Tag Events
                                 WHEN custom_name IS NOT NULL AND LAG(custom_name) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NULL 
-                                    THEN 17  -- NAMETAG_ADDED
+                                    THEN '17'  -- NAMETAG_ADDED
                                 WHEN custom_name IS NULL AND LAG(custom_name) OVER (PARTITION BY unique_id ORDER BY asset_id) IS NOT NULL 
-                                    THEN 18  -- NAMETAG_REMOVED
+                                    THEN '18'  -- NAMETAG_REMOVED
 
                                 -- Storage Unit Events
                                 WHEN inventory = -1 AND LAG(inventory) OVER (PARTITION BY unique_id ORDER BY asset_id) != -1 
-                                    THEN 22  -- STORAGE_UNIT_STORED
+                                    THEN '22'  -- STORAGE_UNIT_STORED
                                 WHEN inventory != -1 AND LAG(inventory) OVER (PARTITION BY unique_id ORDER BY asset_id) = -1 
-                                    THEN 23  -- STORAGE_UNIT_RETRIEVED
+                                    THEN '23'  -- STORAGE_UNIT_RETRIEVED
 
-                                ELSE 99  -- UNKNOWN
+                                ELSE '99'  -- UNKNOWN
                             END
-                    END as history_type
-                FROM asset
+                    END)::history_type_enum as history_type
+                FROM asset a
             )
             INSERT INTO history (
                 unique_id, asset_id, prev_asset_id, type, owner, prev_owner,
@@ -282,7 +280,10 @@ export class ImportModule implements OnModuleInit {
                 prev_keychains,
                 created_at
             FROM ranked_assets
-            ORDER BY unique_id, asset_id
+            ORDER BY unique_id, asset_id;
+
+            -- Commit the transaction
+            COMMIT;
         `)
 
         this.logger.debug('History rebuild completed')

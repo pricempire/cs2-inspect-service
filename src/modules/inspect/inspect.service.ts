@@ -13,12 +13,11 @@ import { History } from 'src/entities/history.entity'
 import { Repository } from 'typeorm'
 import { FormatService } from './format.service'
 import { HistoryType } from 'src/entities/history.entity'
-import { PricempireService } from '../pricempire/pricempire.service'
-import { HttpService } from '@nestjs/axios'
 import { Cron } from '@nestjs/schedule'
 import { InspectDto } from './inspect.dto'
 import { Bot } from './bot.class'
 import { createHash } from 'crypto'
+import { QueueService } from './queue.service'
 @Injectable()
 export class InspectService implements OnModuleInit {
     private readonly logger = new Logger(InspectService.name)
@@ -62,8 +61,7 @@ export class InspectService implements OnModuleInit {
         private assetRepository: Repository<Asset>,
         @InjectRepository(History)
         private historyRepository: Repository<History>,
-        private readonly pricempireService: PricempireService,
-        private readonly httpService: HttpService,
+        private readonly queueService: QueueService,
     ) { }
 
     async onModuleInit() {
@@ -285,106 +283,76 @@ export class InspectService implements OnModuleInit {
     }
 
     public async inspectItem(query: InspectDto) {
-        // Add check for minimum required bots
-        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
-        if (readyBots === 0) {
+        if (this.queueService.isFull()) {
             throw new HttpException(
-                'No inspection bots are currently available. Please try again later.',
-                HttpStatus.SERVICE_UNAVAILABLE
+                `Queue is full (${this.queueService.size()}/${this.MAX_QUEUE_SIZE}), please try again later`,
+                HttpStatus.TOO_MANY_REQUESTS
             );
         }
 
-        if (this.inspects.size >= this.MAX_QUEUE_SIZE) {
-            throw new HttpException(
-                `Queue is full (${this.inspects.size}/${this.MAX_QUEUE_SIZE}), please try again later`,
-                HttpStatus.TOO_MANY_REQUESTS
-            )
-        }
+        const { s, a, d, m } = this.parseService.parse(query);
 
-        this.currentRequests++
+        // Add debug logging
+        this.logger.debug(`Processing inspect request for asset ${a}`);
 
-        const { s, a, d, m } = this.parseService.parse(query)
-
-        // Handle Pricempire ping
-        if (process.env.PING_PRICEMPIRE === 'true') {
-            this.pricempireService.ping({ s, a, d, m })
-        }
-
-        // Check cache if refresh not requested
+        // Handle cache check
         if (!query.refresh) {
-            const cachedAsset = await this.checkCache(a, d)
+            const cachedAsset = await this.checkCache(a, d);
             if (cachedAsset) {
-                this.cached++
-                return cachedAsset
+                this.cached++;
+                return cachedAsset;
             }
-        } else if (process.env.ALLOW_REFRESH === 'false') {
-            throw new HttpException('Refresh is not allowed', HttpStatus.FORBIDDEN)
         }
 
-        const resultPromise = new Promise((resolve, reject) => {
+        return new Promise((resolve, reject) => {
             const attemptInspection = async (retryCount = 0) => {
-                const bot = await this.getAvailableBot()
+                const bot = await this.getAvailableBot();
                 if (!bot) {
-                    const cachedAsset = await this.checkCache(a, d)
-                    if (cachedAsset) {
-                        this.cached++
-                        return resolve(cachedAsset)
-                    }
-                    return reject(new HttpException('No bots are ready', HttpStatus.FAILED_DEPENDENCY))
+                    return reject(new HttpException('No bots are ready', HttpStatus.FAILED_DEPENDENCY));
                 }
 
                 const timeoutId = setTimeout(async () => {
                     if (retryCount < this.MAX_RETRIES) {
-                        clearTimeout(timeoutId)
-                        this.inspects.delete(a)
-                        await attemptInspection(retryCount + 1)
+                        this.logger.debug(`Inspection timeout for asset ${a}, retry ${retryCount + 1}`);
+                        this.queueService.remove(a);
+                        await attemptInspection(retryCount + 1);
                     } else {
-                        this.inspects.delete(a)
-                        this.failed++
-                        reject(new HttpException('Inspection request timed out after retries', HttpStatus.GATEWAY_TIMEOUT))
+                        this.logger.error(`Max retries reached for asset ${a}`);
+                        this.queueService.remove(a);
+                        this.failed++;
+                        reject(new HttpException('Inspection request timed out after retries', HttpStatus.GATEWAY_TIMEOUT));
                     }
-                }, this.QUEUE_TIMEOUT)
+                }, this.QUEUE_TIMEOUT);
 
-                this.inspects.set(a, {
+                // Add to queue before making the request
+                this.queueService.add(a, {
                     ms: m !== '0' && m ? m : s,
                     d,
-                    resolve: (value: any) => {
-                        clearTimeout(timeoutId)
-                        resolve(value)
-                    },
-                    reject: (reason?: any) => {
-                        clearTimeout(timeoutId)
-                        reject(reason)
-                    },
+                    resolve,
+                    reject,
                     timeoutId,
-                    startTime: Date.now(),
                     retryCount,
-                    inspectUrl: { s, a, d, m },
-                })
+                    inspectUrl: { s, a, d, m }
+                });
 
                 try {
-                    await bot.inspectItem(s !== '0' ? s : m, a, d)
+                    this.logger.debug(`Sending inspect request for asset ${a} to bot`);
+                    await bot.inspectItem(s !== '0' ? s : m, a, d);
                 } catch (error) {
+                    this.logger.error(`Bot inspection error for asset ${a}: ${error.message}`);
                     if (retryCount < this.MAX_RETRIES) {
-                        clearTimeout(timeoutId)
-                        this.inspects.delete(a)
-                        await attemptInspection(retryCount + 1)
+                        this.queueService.remove(a);
+                        await attemptInspection(retryCount + 1);
                     } else {
-                        const inspect = this.inspects.get(a)
-                        if (inspect?.timeoutId) {
-                            clearTimeout(inspect.timeoutId)
-                        }
-                        this.failed++
-                        this.inspects.delete(a)
-                        reject(new HttpException(error.message, HttpStatus.GATEWAY_TIMEOUT))
+                        this.queueService.remove(a);
+                        this.failed++;
+                        reject(new HttpException(error.message, HttpStatus.GATEWAY_TIMEOUT));
                     }
                 }
-            }
+            };
 
-            attemptInspection()
-        })
-
-        return resultPromise
+            attemptInspection();
+        });
     }
 
     private async getAvailableBot(): Promise<Bot | null> {
@@ -440,10 +408,14 @@ export class InspectService implements OnModuleInit {
     }
 
     private async handleInspectResult(username: string, response: any) {
-        const inspectData = this.inspects.get(response.itemid)
+        // Add debug logging
+        this.logger.debug(`Received inspect result for item ${response.itemid} from bot ${username}`);
+
+        const inspectData = this.queueService.get(response.itemid.toString());  // Ensure string conversion
         if (!inspectData) {
-            this.logger.error(`No inspect data found for item ${response.itemid}`)
-            return
+            this.logger.error(`No inspect data found for item ${response.itemid}. Queue size: ${this.queueService.size()}`);
+            this.logger.debug(`Current queue items: ${JSON.stringify(Array.from(this.queueService.getQueueMetrics().items))}`);
+            return;
         }
 
         try {
@@ -457,39 +429,27 @@ export class InspectService implements OnModuleInit {
                 questId: response.questid,
                 quality: response.quality,
                 dropReason: response.dropreason
-            })
+            });
 
-            const history = await this.findHistory(response)
-            await this.saveHistory(response, history, inspectData, uniqueId)
-            const asset = await this.saveAsset(response, inspectData, uniqueId)
+            const history = await this.findHistory(response);
+            await this.saveHistory(response, history, inspectData, uniqueId);
+            const asset = await this.saveAsset(response, inspectData, uniqueId);
 
-            const formattedResponse = await this.formatService.formatResponse(asset)
-            this.success++
+            const formattedResponse = await this.formatService.formatResponse(asset);
+            this.success++;
 
-            inspectData.resolve(formattedResponse)
-            return formattedResponse
+            inspectData.resolve(formattedResponse);
         } catch (error) {
             this.logger.error(`Failed to handle inspect result: ${error.message}`);
-
-            // Only increment failed counter once
-            if (!(error instanceof HttpException) || error.getStatus() !== HttpStatus.NOT_FOUND) {
+            if (!(error instanceof HttpException)) {
                 this.failed++;
             }
-
-            // Standardize error response
-            const httpException = error instanceof HttpException
-                ? error
-                : new HttpException(
-                    error.message || 'Internal server error',
-                    HttpStatus.INTERNAL_SERVER_ERROR
-                );
-
-            inspectData.reject(httpException);
+            inspectData.reject(error);
         } finally {
             if (inspectData.timeoutId) {
-                clearTimeout(inspectData.timeoutId)
+                clearTimeout(inspectData.timeoutId);
             }
-            this.inspects.delete(response.itemid)
+            this.queueService.remove(response.itemid.toString());  // Ensure string conversion
         }
     }
 
@@ -669,18 +629,11 @@ export class InspectService implements OnModuleInit {
 
     @Cron('*/30 * * * * *')
     private async cleanupStaleRequests() {
-        const now = Date.now()
-        const staleTimeout = this.QUEUE_TIMEOUT * 2
-
-        for (const [assetId, inspect] of this.inspects.entries()) {
-            if (now - inspect.startTime > staleTimeout) {
-                if (inspect.timeoutId) {
-                    clearTimeout(inspect.timeoutId)
-                }
-                this.inspects.delete(assetId)
-                this.failed++
-                this.logger.warn(`Cleaned up stale request for asset ${assetId}`)
-            }
+        const staleRequests = this.queueService.getStaleRequests();
+        for (const [assetId, request] of staleRequests) {
+            this.queueService.remove(assetId);
+            this.failed++;
+            this.logger.warn(`Cleaned up stale request for asset ${assetId}`);
         }
     }
 

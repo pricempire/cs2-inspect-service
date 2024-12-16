@@ -9,6 +9,7 @@ import { FormatService } from './format.service'
 import { PricempireModule } from '../pricempire/pricempire.module'
 import { HttpModule } from '@nestjs/axios'
 import { Rankings } from 'src/views/rankings.view'
+import { QueueService } from './queue.service'
 
 @Module({
     imports: [
@@ -16,7 +17,7 @@ import { Rankings } from 'src/views/rankings.view'
         PricempireModule,
         HttpModule,
     ],
-    providers: [InspectService, ParseService, FormatService],
+    providers: [InspectService, ParseService, FormatService, QueueService],
     controllers: [InspectController],
 })
 export class InspectModule { }
