@@ -358,7 +358,7 @@ export class InspectService implements OnModuleInit {
 
                 try {
                     // this.logger.debug(`Sending inspect request for asset ${a} to bot`);
-                    await bot.inspectItem(s !== '0' ? s : m, a, d);
+                    await bot.inspectItem(m !== '0' && m ? m : s, a, d);
                 } catch (error) {
                     this.logger.error(`Bot inspection error for asset ${a}: ${error.message}`);
                     if (retryCount < this.MAX_RETRIES) {
