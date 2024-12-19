@@ -2,7 +2,7 @@ import { Logger, Module } from '@nestjs/common'
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm'
 import { InspectModule } from './inspect/inspect.module'
-import { Cron, ScheduleModule } from '@nestjs/schedule'
+import { Cron, CronExpression, ScheduleModule } from '@nestjs/schedule'
 import { DataSource } from 'typeorm'
 import 'dotenv/config'
 
@@ -33,7 +33,7 @@ export class MainModule {
     /**
      * Refresh the materialized view "rankings"
      */
-    @Cron('0 0 * * * *')
+    @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
     async handleCron() {
         if (this.isRunning) {
             this.logger.debug('Cron job is already running, skipping')
