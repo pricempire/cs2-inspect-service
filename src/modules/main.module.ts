@@ -29,11 +29,18 @@ export class MainModule {
     private readonly logger = new Logger(MainModule.name)
     constructor(@InjectDataSource() private dataSource: DataSource) { }
 
+    private isRunning = false;
     /**
      * Refresh the materialized view "rankings"
      */
     @Cron('0 0 * * * *')
     async handleCron() {
+        if (this.isRunning) {
+            this.logger.debug('Cron job is already running, skipping')
+            return;
+        }
+
+        this.isRunning = true;
         this.logger.debug('Refreshing materialized view "rankings"')
 
         const date = new Date()
@@ -43,5 +50,7 @@ export class MainModule {
         this.logger.debug(
             'Materialized view "rankings" refreshed in ' + diff / 1000 + 's',
         )
+
+        this.isRunning = false;
     }
 }
