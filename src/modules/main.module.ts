@@ -26,9 +26,27 @@ import 'dotenv/config'
     ],
 })
 export class MainModule {
-    private readonly logger = new Logger(MainModule.name)
-    constructor(@InjectDataSource() private dataSource: DataSource) { }
+    constructor() {
+        if (!process.env.POSTGRESQL_HOST) {
+            throw new Error('POSTGRESQL_HOST is not defined')
+        }
+        if (!process.env.POSTGRESQL_PORT) {
+            throw new Error('POSTGRESQL_PORT is not defined')
+        }
+        if (!process.env.POSTGRESQL_USERNAME) {
+            throw new Error('POSTGRESQL_USERNAME is not defined')
+        }
+        if (!process.env.POSTGRESQL_PASSWORD) {
+            throw new Error('POSTGRESQL_PASSWORD is not defined')
+        }
+        if (!process.env.POSTGRESQL_DB) {
+            throw new Error('POSTGRESQL_DB is not defined')
+        }
+    }
+    @InjectDataSource()
+    private dataSource: DataSource
 
+    private readonly logger = new Logger(MainModule.name)
     private isRunning = false;
     /**
      * Refresh the materialized view "rankings"

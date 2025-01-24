@@ -151,6 +151,7 @@ export class InspectService implements OnModuleInit {
                             debug: process.env.DEBUG === 'true',
                             sessionPath,
                             blacklistPath: process.env.BLACKLIST_PATH || './blacklist.txt',
+                            inspectTimeout: 10000,
                         });
 
                         bot.on('inspectResult', (response) => this.handleInspectResult(username, response));

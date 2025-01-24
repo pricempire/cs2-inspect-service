@@ -156,6 +156,10 @@ export class Bot extends EventEmitter {
             this.steamUser!.on('loggedOn', checkInitComplete)
             this.cs2Instance!.on('connectedToGC', checkInitComplete)
 
+            this.cs2Instance!.on('error', (err) => {
+                this.log(`CS2 instance error during initialization: ${err.message}`, true)
+            })
+
             this.steamUser!.on('error', (err) => {
                 this.log(`Steam error during initialization: ${err.message}`, true)
                 reject(err)
