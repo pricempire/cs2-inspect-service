@@ -37,6 +37,11 @@ export class InspectDto {
     @Transform(({ value }) => value === 'true')
     refresh?: boolean
 
+    @IsString({
+        message: 'Invalid password',
+    })
+    password?: string
+
     @IsOptional()
     @IsString()
     // example: steam://rungame/730/76561202255233023/+csgo_econ_action_preview%20S76561198023809011A40368145941D14586214085613790969
