@@ -27,10 +27,6 @@ export class InspectService implements OnModuleInit {
     private readonly MAX_QUEUE_SIZE = parseInt(process.env.MAX_QUEUE_SIZE || '100')
     private throttledAccounts: Map<string, number> = new Map()
     private readonly THROTTLE_COOLDOWN = 30 * 60 * 1000 // 30 minutes in milliseconds
-    private readonly REQUEST_DELAY = 2000 // 2 seconds delay between requests
-    private readonly MAX_REQUESTS_PER_BOT = 10 // Maximum requests per bot before rotating
-    private botRequestCounts: Map<string, number> = new Map()
-    private lastRequestTime: number = 0
 
     private bots: Map<string, Bot> = new Map()
     private accounts: string[] = []
@@ -318,6 +314,9 @@ export class InspectService implements OnModuleInit {
 
         const { s, a, d, m } = this.parseService.parse(query);
 
+        // Add debug logging
+        // this.logger.debug(`Processing inspect request for asset ${a}`);
+
         // Handle cache check
         if (!query.refresh) {
             const cachedAsset = await this.checkCache(a, d);
@@ -336,7 +335,7 @@ export class InspectService implements OnModuleInit {
 
                 const timeoutId = setTimeout(async () => {
                     if (retryCount < this.MAX_RETRIES) {
-                        this.logger.warn(`Inspection timeout for asset ${a}, retry ${retryCount + 1}`);
+                        this.logger.error(`Inspection timeout for asset ${a}, retry ${retryCount + 1}`);
                         this.queueService.remove(a);
                         await attemptInspection(retryCount + 1);
                     } else {
@@ -359,37 +358,17 @@ export class InspectService implements OnModuleInit {
                 });
 
                 try {
+                    // this.logger.debug(`Sending inspect request for asset ${a} to bot`);
                     await bot.inspectItem(m !== '0' && m ? m : s, a, d);
                 } catch (error) {
                     this.logger.error(`Bot inspection error for asset ${a}: ${error.message}`);
-
-                    // Check for rate limit or cooldown errors
-                    if (error.message?.includes('rate limit') || error.message?.includes('cooldown')) {
-                        // Find the username for this bot
-                        const username = Array.from(this.bots.entries()).find(([_, b]) => b === bot)?.[0];
-                        if (username) {
-                            // Remove the bot from rotation temporarily
-                            this.botRequestCounts.set(username, this.MAX_REQUESTS_PER_BOT);
-                        }
-
-                        if (retryCount < this.MAX_RETRIES) {
-                            this.logger.warn(`Rate limit hit for bot, retrying with different bot...`);
-                            this.queueService.remove(a);
-                            await attemptInspection(retryCount + 1);
-                        } else {
-                            this.queueService.remove(a);
-                            this.failed++;
-                            reject(new HttpException('All bots are rate limited', HttpStatus.TOO_MANY_REQUESTS));
-                        }
+                    if (retryCount < this.MAX_RETRIES) {
+                        this.queueService.remove(a);
+                        await attemptInspection(retryCount + 1);
                     } else {
-                        if (retryCount < this.MAX_RETRIES) {
-                            this.queueService.remove(a);
-                            await attemptInspection(retryCount + 1);
-                        } else {
-                            this.queueService.remove(a);
-                            this.failed++;
-                            reject(new HttpException(error.message, HttpStatus.GATEWAY_TIMEOUT));
-                        }
+                        this.queueService.remove(a);
+                        this.failed++;
+                        reject(new HttpException(error.message, HttpStatus.GATEWAY_TIMEOUT));
                     }
                 }
             };
@@ -400,36 +379,31 @@ export class InspectService implements OnModuleInit {
 
     private async getAvailableBot(): Promise<Bot | null> {
         const readyBots = Array.from(this.bots.entries())
-            .filter(([username, bot]) => {
-                // Check if bot is ready and hasn't exceeded request limit
-                const requestCount = this.botRequestCounts.get(username) || 0
-                return bot.isReady() && requestCount < this.MAX_REQUESTS_PER_BOT
-            })
+            .filter(([_, bot]) => bot.isReady())
 
         if (readyBots.length === 0) {
-            // If no bots available under request limit, reset all counters
-            this.botRequestCounts.clear()
-            // Try again with cleared counters
-            return this.getAvailableBot()
+            return null
         }
 
-        // Add delay between requests
-        const now = Date.now()
-        const timeSinceLastRequest = now - this.lastRequestTime
-        if (timeSinceLastRequest < this.REQUEST_DELAY) {
-            await new Promise(resolve => setTimeout(resolve, this.REQUEST_DELAY - timeSinceLastRequest))
+        // Get the next available bot using the total number of bots
+        const startIndex = this.nextBot
+        let attempts = 0
+
+        // Try finding an available bot, starting from the next position
+        while (attempts < this.bots.size) {
+            const currentIndex = (startIndex + attempts) % this.bots.size
+            const bot = Array.from(this.bots.values())[currentIndex]
+
+            if (bot && bot.isReady()) {
+                this.nextBot = (currentIndex + 1) % this.bots.size
+                return bot
+            }
+
+            attempts++
         }
-        this.lastRequestTime = Date.now()
 
-        // Get the next available bot using round-robin
-        const [username, bot] = readyBots[this.nextBot % readyBots.length]
-        this.nextBot = (this.nextBot + 1) % this.bots.size
-
-        // Increment request count for this bot
-        const currentCount = this.botRequestCounts.get(username) || 0
-        this.botRequestCounts.set(username, currentCount + 1)
-
-        return bot
+        // If we get here, return the first available bot
+        return readyBots[0][1] // Extract the Bot from the [string, Bot] tuple
     }
 
     @Cron('* * * * * *')
