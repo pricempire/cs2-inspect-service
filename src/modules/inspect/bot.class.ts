@@ -331,6 +331,7 @@ export class Bot extends EventEmitter {
         return new Promise((resolve, reject) => {
             this.currentInspectTimeout = setTimeout(() => {
                 this.handleInspectTimeout()
+                this.log(`Inspect timeout for ${this.config.username}, link: steam://rungame/730/76561202255233023/+csgo_econ_action_preview%20${s !== '0' ? 'S' + s : 'M' + a}A${a}D${d}`, true)
                 reject(new Error('Inspect timeout'))
             }, this.config.inspectTimeout)
 
