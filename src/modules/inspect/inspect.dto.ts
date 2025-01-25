@@ -38,8 +38,9 @@ export class InspectDto {
     refresh?: boolean
 
     @IsString({
-        message: 'Invalid password',
+        message: 'Invalid password, please contact support if you need access.',
     })
+    @IsOptional()
     password?: string
 
     @IsOptional()
