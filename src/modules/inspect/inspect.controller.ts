@@ -21,7 +21,7 @@ export class InspectController {
             return
         }
 
-        if (query.password !== process.env.PASSWORD) {
+        if (process.env.PASSWORD && query.password !== process.env.PASSWORD) {
             return res.status(401).send({ message: 'Invalid password' })
         }
 
