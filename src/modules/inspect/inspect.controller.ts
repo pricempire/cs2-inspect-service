@@ -21,9 +21,11 @@ export class InspectController {
             return
         }
 
+        /*
         if (process.env.PASSWORD && query.password !== process.env.PASSWORD) {
             return res.status(401).send({ message: 'Invalid password' })
         }
+        */
 
         const data = await this.inspectService.inspectItem(query)
         return res.send(data)
