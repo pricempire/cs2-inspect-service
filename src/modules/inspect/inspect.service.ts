@@ -15,7 +15,7 @@ import { FormatService } from './format.service'
 import { HistoryType } from 'src/entities/history.entity'
 import { Cron } from '@nestjs/schedule'
 import { InspectDto } from './inspect.dto'
-import { Bot } from './bot.class'
+import { Bot, BotError } from './bot.class'
 import { createHash } from 'crypto'
 import { QueueService } from './queue.service'
 
@@ -29,6 +29,8 @@ export class InspectService implements OnModuleInit {
     private readonly MAX_QUEUE_SIZE = parseInt(process.env.MAX_QUEUE_SIZE || '100')
     private throttledAccounts: Map<string, number> = new Map()
     private readonly THROTTLE_COOLDOWN = 30 * 60 * 1000 // 30 minutes in milliseconds
+    private botReinitAttempts: Map<string, number> = new Map() // Track re-initialization attempts
+    private readonly MAX_REINIT_ATTEMPTS = parseInt(process.env.MAX_REINIT_ATTEMPTS || '3') // Max re-init attempts
 
     private bots: Map<string, Bot> = new Map()
     private accounts: string[] = []
@@ -170,6 +172,13 @@ export class InspectService implements OnModuleInit {
                     bot.on('inspectResult', (response) => this.handleInspectResult(username, response));
                     bot.on('error', (error) => {
                         this.logger.error(`Bot ${username} error: ${error}`);
+
+                        // Attempt to re-initialize the bot for non-login related errors
+                        if (error !== BotError.ACCOUNT_DISABLED &&
+                            error !== BotError.INVALID_CREDENTIALS &&
+                            error !== BotError.LOGIN_THROTTLED) {
+                            this.attemptBotReinitialization(username, password);
+                        }
                     });
 
                     await bot.initialize();
@@ -179,11 +188,13 @@ export class InspectService implements OnModuleInit {
                     return;
 
                 } catch (error) {
-                    if (error.message === 'ACCOUNT_DISABLED') {
+                    const errorMessage = error.message || error.toString();
+
+                    if (errorMessage.includes('ACCOUNT_DISABLED') || error === BotError.ACCOUNT_DISABLED) {
                         this.logger.error(`Account ${username} is disabled. Blacklisting...`);
                         this.accounts = this.accounts.filter(acc => !acc.startsWith(username));
                         return;
-                    } else if (error.message === 'LOGIN_THROTTLED') {
+                    } else if (errorMessage.includes('LOGIN_THROTTLED') || error === BotError.LOGIN_THROTTLED) {
                         this.logger.warn(`Account ${username} is throttled. Adding to cooldown.`);
                         this.throttledAccounts.set(username, Date.now() + this.THROTTLE_COOLDOWN);
                         return;
@@ -230,6 +241,7 @@ export class InspectService implements OnModuleInit {
         const initializingBots = Array.from(this.bots.values()).filter(bot => bot.isInitializing()).length
         const totalBots = this.bots.size
         const queueUtilization = (this.inspects.size / this.MAX_QUEUE_SIZE) * 100
+        const reinitAttempts = this.botReinitAttempts.size
 
         // Calculate uptime
         const uptime = Date.now() - this.startTime
@@ -257,6 +269,7 @@ export class InspectService implements OnModuleInit {
                 cooldownCount: bot.getCooldownCount() || 0,
                 throttled: this.throttledAccounts.has(username),
                 throttleExpiry: this.throttledAccounts.get(username),
+                reinitAttempts: this.botReinitAttempts.get(username) || 0
             }
         }).sort((a, b) => b.inspectCount - a.inspectCount) // Sort by inspect count
 
@@ -306,7 +319,8 @@ export class InspectService implements OnModuleInit {
                 utilization: queueUtilization.toFixed(2) + '%',
                 avgProcessingTime: Math.round(this.getAverageProcessingTime()) + 'ms',
                 items: this.getQueueItems()
-            }
+            },
+            reinitAttempts: reinitAttempts
         }
     }
 
@@ -691,6 +705,123 @@ export class InspectService implements OnModuleInit {
             this.queueService.remove(assetId);
             this.failed++;
             this.logger.warn(`Cleaned up stale request for asset ${assetId}`);
+        }
+    }
+
+    @Cron('0 */10 * * * *') // Run every 10 minutes
+    private resetReinitAttempts() {
+        const count = this.botReinitAttempts.size;
+        if (count > 0) {
+            this.logger.debug(`Resetting re-initialization attempts for ${count} bots`);
+            this.botReinitAttempts.clear();
+        }
+    }
+
+    @Cron('0 */5 * * * *') // Run every 5 minutes
+    private async checkAndReinitializeDisconnectedBots() {
+        const disconnectedBots = Array.from(this.bots.entries())
+            .filter(([_, bot]) => bot.isDisconnected() || bot.isError())
+            .map(([username, _]) => username);
+
+        if (disconnectedBots.length > 0) {
+            this.logger.debug(`Found ${disconnectedBots.length} disconnected/error bots. Attempting to re-initialize.`);
+
+            for (const username of disconnectedBots) {
+                const account = this.accounts.find(acc => acc.startsWith(username));
+                if (account) {
+                    const [_, password] = account.split(':');
+                    if (password) {
+                        this.logger.debug(`Attempting to re-initialize disconnected bot: ${username}`);
+                        await this.attemptBotReinitialization(username, password);
+                    }
+                }
+            }
+        }
+    }
+
+    private async attemptBotReinitialization(username: string, password: string) {
+        // Implementation of attemptBotReinitialization method
+        this.logger.warn(`Attempting to re-initialize bot ${username}`);
+
+        // Check if the bot is already being reinitialized or is throttled
+        const throttleExpiry = this.throttledAccounts.get(username);
+        if (throttleExpiry && Date.now() < throttleExpiry) {
+            this.logger.warn(`Bot ${username} is throttled. Skipping re-initialization.`);
+            return;
+        }
+
+        // Check if we've exceeded the maximum number of re-initialization attempts
+        const attempts = this.botReinitAttempts.get(username) || 0;
+        if (attempts >= this.MAX_REINIT_ATTEMPTS) {
+            this.logger.error(`Bot ${username} has exceeded the maximum number of re-initialization attempts (${this.MAX_REINIT_ATTEMPTS}). Marking as throttled.`);
+            this.throttledAccounts.set(username, Date.now() + this.THROTTLE_COOLDOWN);
+            this.botReinitAttempts.delete(username); // Reset the counter
+            return;
+        }
+
+        // Increment the re-initialization attempts counter
+        this.botReinitAttempts.set(username, attempts + 1);
+
+        // Get the existing bot
+        const existingBot = this.bots.get(username);
+        if (existingBot) {
+            try {
+                // Clean up the existing bot
+                await existingBot.destroy().catch(err => {
+                    this.logger.error(`Error destroying bot ${username}: ${err.message}`);
+                });
+
+                // Remove from bots map
+                this.bots.delete(username);
+
+                // Create a new bot instance
+                const sessionPath = process.env.SESSION_PATH || './sessions';
+                const bot = new Bot({
+                    username,
+                    password,
+                    proxyUrl: process.env.PROXY_URL,
+                    debug: process.env.DEBUG === 'true',
+                    sessionPath,
+                    blacklistPath: process.env.BLACKLIST_PATH || './blacklist.txt',
+                    inspectTimeout: 10000,
+                });
+
+                bot.on('inspectResult', (response) => this.handleInspectResult(username, response));
+                bot.on('error', (error) => {
+                    this.logger.error(`Bot ${username} error: ${error}`);
+
+                    // Attempt to re-initialize the bot for non-login related errors
+                    if (error !== BotError.ACCOUNT_DISABLED &&
+                        error !== BotError.INVALID_CREDENTIALS &&
+                        error !== BotError.LOGIN_THROTTLED) {
+                        this.attemptBotReinitialization(username, password);
+                    }
+                });
+
+                // Initialize the new bot
+                await bot.initialize();
+                this.bots.set(username, bot);
+                this.logger.debug(`Bot ${username} re-initialized successfully`);
+
+                // Reset the re-initialization attempts counter on success
+                this.botReinitAttempts.delete(username);
+
+            } catch (error) {
+                const errorMessage = error.message || error.toString();
+
+                if (errorMessage.includes('ACCOUNT_DISABLED') || error === BotError.ACCOUNT_DISABLED) {
+                    this.logger.error(`Account ${username} is disabled. Blacklisting...`);
+                    this.accounts = this.accounts.filter(acc => !acc.startsWith(username));
+                    this.botReinitAttempts.delete(username); // Reset the counter
+                } else if (errorMessage.includes('LOGIN_THROTTLED') || error === BotError.LOGIN_THROTTLED) {
+                    this.logger.warn(`Account ${username} is throttled. Adding to cooldown.`);
+                    this.throttledAccounts.set(username, Date.now() + this.THROTTLE_COOLDOWN);
+                    this.botReinitAttempts.delete(username); // Reset the counter
+                } else {
+                    this.logger.error(`Failed to re-initialize bot ${username}: ${errorMessage}`);
+                    // Note: We don't reset the counter here to track consecutive failures
+                }
+            }
         }
     }
 }
