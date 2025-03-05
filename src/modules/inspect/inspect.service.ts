@@ -727,6 +727,51 @@ export class InspectService implements OnModuleInit {
         }
     }
 
+    /**
+     * Aggressive reinitialization of all missing bots every 2 hours
+     * This ensures that any bots that might have been missed by the regular
+     * reinitialization process are properly handled.
+     */
+    @Cron('0 0 */2 * * *') // Run every 2 hours
+    private async reinitializeAllMissingBots() {
+        this.logger.debug('Running aggressive reinitialization of all missing bots');
+
+        // Get all account usernames
+        const allUsernames = this.accounts.map(account => account.split(':')[0]);
+
+        // Find missing bots (accounts that should have a bot but don't)
+        const missingBots = allUsernames.filter(username => !this.bots.has(username));
+
+        if (missingBots.length > 0) {
+            this.logger.debug(`Found ${missingBots.length} missing bots. Reinitializing all of them.`);
+
+            // Reset all reinitialization attempts to give them a fresh start
+            for (const username of missingBots) {
+                this.botReinitAttempts.delete(username);
+            }
+
+            // Reset throttling for these bots to allow reinitialization
+            for (const username of missingBots) {
+                if (this.throttledAccounts.has(username)) {
+                    this.logger.debug(`Removing throttle for missing bot ${username}`);
+                    this.throttledAccounts.delete(username);
+                }
+            }
+
+            // Add all missing bots to failedBots set
+            for (const username of missingBots) {
+                this.failedBots.add(username);
+            }
+
+            // Trigger the regular reinitialization process
+            await this.checkAndReinitializeDisconnectedBots();
+
+            this.logger.debug(`Completed aggressive reinitialization attempt for ${missingBots.length} missing bots`);
+        } else {
+            this.logger.debug('No missing bots found. All accounts have active bots.');
+        }
+    }
+
     @Cron('0 */5 * * * *') // Run every 5 minutes
     private async checkAndReinitializeDisconnectedBots() {
         // First, handle disconnected bots from the bots Map
