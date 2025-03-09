@@ -17,7 +17,7 @@ COPY . .
 # Build with pnpm (proven to work with the import structure)
 RUN pnpm build
 
-# Production stage with Node.js 23.9
+# Production stage with Node.js 23 alpine (lighter)
 FROM node:23-alpine
 
 WORKDIR /app
@@ -36,12 +36,24 @@ RUN mkdir -p sessions && chmod 777 sessions
 # Set environment variables
 ENV NODE_ENV=production
 
-# Increase memory limit for Node.js to handle bot initialization
-ENV NODE_OPTIONS="--max-old-space-size=8096"
+# Optimize for worker threads and memory allocation
+ENV NODE_OPTIONS="--max-old-space-size=8096 --experimental-worker"
+ENV UV_THREADPOOL_SIZE=64
+
+# Bot worker configuration 
+ENV BOTS_PER_WORKER=50
+ENV MAX_WORKERS=16
+ENV WORKER_MEMORY_LIMIT=512
+
+# Enable threading optimizations
+ENV NODE_WORKER_THREADS=1
+
+# Add this variable to enable graceful startup
+ENV THROTTLE_STARTUP=true
 
 EXPOSE 3000
 
 # Run with Node.js
 CMD ["node", "dist/main.js"]
 
-# Using Node.js 23.9 for reliable operation with bot initialization
+# Using worker threads for bot management while keeping HTTP handling responsive
