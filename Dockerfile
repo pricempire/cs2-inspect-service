@@ -18,7 +18,7 @@ COPY . .
 RUN pnpm build
 
 # Production stage with Node.js 23.9
-FROM node:23.9-slim
+FROM node:23-alpine
 
 WORKDIR /app
 

@@ -118,10 +118,8 @@ export class InspectService implements OnModuleInit {
     }
 
     private async initializeAllBots() {
-        const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_INIT || '10'); // Increase default concurrent initializations
+        const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || '100');
         const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3');
-        const INIT_TIMEOUT = parseInt(process.env.INIT_TIMEOUT || '30000'); // 30 second timeout for initialization
-        const PRIORITIZE_COUNT = parseInt(process.env.PRIORITIZE_COUNT || '20'); // Number of bots to prioritize
 
         const sessionPath = process.env.SESSION_PATH || './sessions';
         if (!fs.existsSync(sessionPath)) {
@@ -129,175 +127,72 @@ export class InspectService implements OnModuleInit {
             this.logger.debug(`Created session directory at: ${sessionPath}`);
         }
 
-        // Check for existing session files to prioritize accounts with saved sessions
-        const existingSessionFiles = fs.readdirSync(sessionPath).filter(file => file.endsWith('.json'));
-        const accountsWithSessions = existingSessionFiles.map(file => file.replace('.json', ''));
+        for (let i = 0; i < this.accounts.length; i += BATCH_SIZE) {
+            const batch = this.accounts.slice(i, i + BATCH_SIZE);
+            const initPromises = batch.map(async (account) => {
+                const [username, password] = account.split(':');
 
-        // Create a prioritized queue for initialization
-        const prioritizedAccounts = [];
-        const remainingAccounts = [];
-
-        this.accounts.forEach(account => {
-            const [username] = account.split(':');
-            const throttleExpiry = this.throttledAccounts.get(username);
-
-            // Skip throttled accounts
-            if (throttleExpiry && Date.now() < throttleExpiry) {
-                this.logger.warn(`Account ${username} is throttled. Skipping initialization.`);
-                return;
-            }
-
-            // Prioritize accounts with existing sessions
-            if (accountsWithSessions.includes(username)) {
-                prioritizedAccounts.push(account);
-            } else {
-                remainingAccounts.push(account);
-            }
-        });
-
-        // Create final queue with prioritized accounts first
-        const initQueue = [
-            ...prioritizedAccounts,
-            ...remainingAccounts
-        ];
-
-        // If specified, only initialize a subset of bots first to get the service running faster
-        const initialBatch = PRIORITIZE_COUNT > 0 && PRIORITIZE_COUNT < initQueue.length
-            ? initQueue.slice(0, PRIORITIZE_COUNT)
-            : initQueue;
-
-        const remainingBatch = PRIORITIZE_COUNT > 0 && PRIORITIZE_COUNT < initQueue.length
-            ? initQueue.slice(PRIORITIZE_COUNT)
-            : [];
-
-        this.logger.log(`Starting initialization of ${initialBatch.length} priority bots with max concurrency of ${MAX_CONCURRENT}`);
-        if (remainingBatch.length > 0) {
-            this.logger.log(`${remainingBatch.length} remaining bots will be initialized after priority batch`);
-        }
-
-        // Use a semaphore-like approach to control concurrency
-        let activeInitializations = 0;
-        let completed = 0;
-        let aborted = false;
-
-        // Create a promise that resolves when all accounts are processed
-        const processAccounts = async (accounts) => {
-            // Process accounts in small batches to avoid memory issues
-            while (accounts.length > 0 && !aborted) {
-                // Take next batch based on available slots
-                const availableSlots = MAX_CONCURRENT - activeInitializations;
-                if (availableSlots <= 0) {
-                    // Wait a short time before checking again
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    continue;
+                // Check if account is throttled
+                const throttleExpiry = this.throttledAccounts.get(username);
+                if (throttleExpiry && Date.now() < throttleExpiry) {
+                    this.logger.warn(`Account ${username} is throttled. Skipping initialization.`);
+                    return;
                 }
 
-                const nextBatch = accounts.splice(0, availableSlots);
-                activeInitializations += nextBatch.length;
+                let retryCount = 0;
+                let initialized = false;
 
-                // Start initialization for this batch
-                nextBatch.forEach(async (account) => {
+                while (retryCount < MAX_RETRIES && !initialized) {
                     try {
-                        const [username, password] = account.split(':');
-
-                        // Set a timeout for initialization to prevent getting stuck
-                        const initPromise = this.initializeBot(username, password, MAX_RETRIES, sessionPath);
-                        const timeoutPromise = new Promise((_, reject) => {
-                            setTimeout(() => reject(new Error(`Initialization timeout for ${username} after ${INIT_TIMEOUT}ms`)), INIT_TIMEOUT);
+                        const bot = new Bot({
+                            username,
+                            password,
+                            proxyUrl: process.env.PROXY_URL,
+                            debug: process.env.DEBUG === 'true',
+                            sessionPath,
+                            blacklistPath: process.env.BLACKLIST_PATH || './blacklist.txt',
+                            inspectTimeout: 10000,
                         });
 
-                        await Promise.race([initPromise, timeoutPromise]);
+                        bot.on('inspectResult', (response) => this.handleInspectResult(username, response));
+                        bot.on('error', (error) => {
+                            this.logger.error(`Bot ${username} error: ${error}`);
+                        });
+
+                        await bot.initialize();
+                        this.bots.set(username, bot);
+                        this.logger.debug(`Bot ${username} initialized successfully`);
+                        initialized = true;
+                        // Clear throttle status if successful
+                        this.throttledAccounts.delete(username);
+
                     } catch (error) {
-                        this.logger.error(`Failed during initialization process: ${error.message}`);
-                    } finally {
-                        activeInitializations--;
-                        completed++;
-
-                        // Log progress periodically
-                        if (completed % 10 === 0 || completed === initialBatch.length) {
-                            this.logger.log(`Bot initialization progress: ${completed}/${initialBatch.length}`);
+                        if (error.message === 'ACCOUNT_DISABLED') {
+                            this.logger.error(`Account ${username} is disabled. Blacklisting...`);
+                            this.accounts = this.accounts.filter(acc => !acc.startsWith(username));
+                            break;
+                        } else if (error.message === 'LOGIN_THROTTLED') {
+                            this.logger.warn(`Account ${username} is throttled. Adding to cooldown.`);
+                            this.throttledAccounts.set(username, Date.now() + this.THROTTLE_COOLDOWN);
+                            break;
+                        } else if (error.message === 'INITIALIZATION_ERROR') {
+                            this.logger.warn(`Initialization timeout for bot ${username}. Retrying...`);
+                            if (retryCount >= MAX_RETRIES) {
+                                this.logger.error(`Max retries reached for bot ${username}. Initialization failed.`);
+                            }
+                        } else {
+                            this.logger.error(`Failed to initialize bot ${username}: ${error.message}`);
                         }
-
-                        // Very short delay to prevent event loop starvation
-                        await new Promise(resolve => setTimeout(resolve, 10));
+                        retryCount++;
                     }
-                });
-
-                // Small delay between batches to prevent event loop starvation
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-        };
-
-        // Process priority batch first
-        await processAccounts([...initialBatch]);
-
-        // If we have enough bots ready after initial batch, start handling requests
-        // while remaining bots initialize in the background
-        const readyBotsCount = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
-        if (readyBotsCount > 0 && remainingBatch.length > 0) {
-            this.logger.log(`${readyBotsCount} bots ready. Starting background initialization for remaining ${remainingBatch.length} bots.`);
-
-            // Start processing remaining accounts in the background
-            processAccounts([...remainingBatch]).catch(error => {
-                this.logger.error(`Error in background initialization: ${error.message}`);
-            });
-        }
-
-        this.logger.log(`Finished initializing priority batch with ${this.bots.size} bots, ${readyBotsCount} ready`);
-    }
-
-    private async initializeBot(username: string, password: string, maxRetries: number, sessionPath: string): Promise<void> {
-        let retryCount = 0;
-
-        while (retryCount < maxRetries) {
-            try {
-                const bot = new Bot({
-                    username,
-                    password,
-                    proxyUrl: process.env.PROXY_URL,
-                    debug: process.env.DEBUG === 'true',
-                    sessionPath,
-                    blacklistPath: process.env.BLACKLIST_PATH || './blacklist.txt',
-                    inspectTimeout: 10000,
-                });
-
-                bot.on('inspectResult', (response) => this.handleInspectResult(username, response));
-                bot.on('error', (error) => {
-                    this.logger.error(`Bot ${username} error: ${error}`);
-                });
-
-                await bot.initialize();
-                this.bots.set(username, bot);
-                this.logger.debug(`Bot ${username} initialized successfully`);
-
-                // Clear throttle status if successful
-                this.throttledAccounts.delete(username);
-                return;
-
-            } catch (error) {
-                if (error.message === 'ACCOUNT_DISABLED') {
-                    this.logger.error(`Account ${username} is disabled. Blacklisting...`);
-                    this.accounts = this.accounts.filter(acc => !acc.startsWith(username));
-                    return;
-                } else if (error.message === 'LOGIN_THROTTLED') {
-                    this.logger.warn(`Account ${username} is throttled. Adding to cooldown.`);
-                    this.throttledAccounts.set(username, Date.now() + this.THROTTLE_COOLDOWN);
-                    return;
-                } else if (error.message === 'INITIALIZATION_ERROR') {
-                    this.logger.warn(`Initialization timeout for bot ${username}. Retrying...`);
-                    if (retryCount >= maxRetries - 1) {
-                        this.logger.error(`Max retries reached for bot ${username}. Initialization failed.`);
-                    }
-                } else {
-                    this.logger.error(`Failed to initialize bot ${username}: ${error.message}`);
                 }
-                retryCount++;
-            }
+            });
 
-            // Add a delay between retries with jitter to prevent thundering herd
-            const jitter = Math.random() * 500;
-            await new Promise(resolve => setTimeout(resolve, 500 + jitter));
+            await Promise.allSettled(initPromises);
+            this.logger.debug(`Initialized batch of ${batch.length} bots (${i + batch.length}/${this.accounts.length} total)`);
         }
+
+        this.logger.debug(`Finished initializing ${this.bots.size} bots`);
     }
 
     public stats() {
@@ -309,7 +204,6 @@ export class InspectService implements OnModuleInit {
         const initializingBots = Array.from(this.bots.values()).filter(bot => bot.isInitializing()).length
         const totalBots = this.bots.size
         const queueUtilization = (this.inspects.size / this.MAX_QUEUE_SIZE) * 100
-        const botAvailabilityPercentage = this.getBotAvailabilityPercentage()
 
         // Calculate uptime
         const uptime = Date.now() - this.startTime
@@ -351,7 +245,6 @@ export class InspectService implements OnModuleInit {
                 error: errorBots,
                 initializing: initializingBots,
                 total: totalBots,
-                availability: botAvailabilityPercentage.toFixed(2) + '%',
                 utilization: (totalBots > 0 ? (busyBots / totalBots) * 100 : 0).toFixed(2) + '%',
                 details: botStats
             },
@@ -409,46 +302,28 @@ export class InspectService implements OnModuleInit {
         }))
     }
 
-    private getBotAvailabilityPercentage(): number {
-        // Count based on total accounts from accounts.txt, not just initialized bots
-        const totalAccountsCount = this.accounts.length;
-        if (totalAccountsCount === 0) return 0;
-
-        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
-        return (readyBots / totalAccountsCount) * 100;
-    }
-
     public async inspectItem(query: InspectDto) {
         this.currentRequests++;
-
-        const { s, a, d, m } = this.parseService.parse(query);
-
-        // First check if we have cached data before checking bot availability
-        if (!query.refresh) {
-            const cachedAsset = await this.checkCache(a, d);
-            if (cachedAsset) {
-                this.cached++;
-                return cachedAsset;
-            }
-        }
-
-        // After checking cache, if no cached data exists, then check bot availability
-        const botAvailability = this.getBotAvailabilityPercentage();
-        const MIN_BOT_AVAILABILITY = 40; // 40% threshold
-
-        if (botAvailability < MIN_BOT_AVAILABILITY) {
-            // this.logger.warn(`Rejecting request due to low bot availability: ${botAvailability.toFixed(2)}% (threshold: ${MIN_BOT_AVAILABILITY}%)`);
-            throw new HttpException(
-                `Service is currently under heavy load (${botAvailability.toFixed(0)}% availability), please try again later`,
-                HttpStatus.SERVICE_UNAVAILABLE
-            );
-        }
 
         if (this.queueService.isFull()) {
             throw new HttpException(
                 `Queue is full (${this.queueService.size()}/${this.MAX_QUEUE_SIZE}), please try again later`,
                 HttpStatus.TOO_MANY_REQUESTS
             );
+        }
+
+        const { s, a, d, m } = this.parseService.parse(query);
+
+        // Add debug logging
+        // this.logger.debug(`Processing inspect request for asset ${a}`);
+
+        // Handle cache check
+        if (!query.refresh) {
+            const cachedAsset = await this.checkCache(a, d);
+            if (cachedAsset) {
+                this.cached++;
+                return cachedAsset;
+            }
         }
 
         return new Promise((resolve, reject) => {
@@ -483,6 +358,7 @@ export class InspectService implements OnModuleInit {
                 });
 
                 try {
+                    // this.logger.debug(`Sending inspect request for asset ${a} to bot`);
                     await bot.inspectItem(m !== '0' && m ? m : s, a, d);
                 } catch (error) {
                     this.logger.error(`Bot inspection error for asset ${a}: ${error.message}`);
