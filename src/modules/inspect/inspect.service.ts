@@ -437,7 +437,7 @@ export class InspectService implements OnModuleInit {
         const MIN_BOT_AVAILABILITY = 40; // 40% threshold
 
         if (botAvailability < MIN_BOT_AVAILABILITY) {
-            this.logger.warn(`Rejecting request due to low bot availability: ${botAvailability.toFixed(2)}% (threshold: ${MIN_BOT_AVAILABILITY}%)`);
+            // this.logger.warn(`Rejecting request due to low bot availability: ${botAvailability.toFixed(2)}% (threshold: ${MIN_BOT_AVAILABILITY}%)`);
             throw new HttpException(
                 `Service is currently under heavy load (${botAvailability.toFixed(0)}% availability), please try again later`,
                 HttpStatus.SERVICE_UNAVAILABLE
