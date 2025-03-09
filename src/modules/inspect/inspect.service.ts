@@ -244,6 +244,7 @@ export class InspectService implements OnModuleInit {
         const initializingBots = Array.from(this.bots.values()).filter(bot => bot.isInitializing()).length
         const totalBots = this.bots.size
         const queueUtilization = (this.inspects.size / this.MAX_QUEUE_SIZE) * 100
+        const botAvailabilityPercentage = this.getBotAvailabilityPercentage()
 
         // Calculate uptime
         const uptime = Date.now() - this.startTime
@@ -285,6 +286,7 @@ export class InspectService implements OnModuleInit {
                 error: errorBots,
                 initializing: initializingBots,
                 total: totalBots,
+                availability: botAvailabilityPercentage.toFixed(2) + '%',
                 utilization: (totalBots > 0 ? (busyBots / totalBots) * 100 : 0).toFixed(2) + '%',
                 details: botStats
             },
@@ -342,28 +344,44 @@ export class InspectService implements OnModuleInit {
         }))
     }
 
+    private getBotAvailabilityPercentage(): number {
+        if (this.bots.size === 0) return 0;
+
+        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
+        return (readyBots / this.bots.size) * 100;
+    }
+
     public async inspectItem(query: InspectDto) {
         this.currentRequests++;
 
-        if (this.queueService.isFull()) {
-            throw new HttpException(
-                `Queue is full (${this.queueService.size()}/${this.MAX_QUEUE_SIZE}), please try again later`,
-                HttpStatus.TOO_MANY_REQUESTS
-            );
-        }
-
         const { s, a, d, m } = this.parseService.parse(query);
 
-        // Add debug logging
-        // this.logger.debug(`Processing inspect request for asset ${a}`);
-
-        // Handle cache check
+        // First check if we have cached data before checking bot availability
         if (!query.refresh) {
             const cachedAsset = await this.checkCache(a, d);
             if (cachedAsset) {
                 this.cached++;
                 return cachedAsset;
             }
+        }
+
+        // After checking cache, if no cached data exists, then check bot availability
+        const botAvailability = this.getBotAvailabilityPercentage();
+        const MIN_BOT_AVAILABILITY = 40; // 40% threshold
+
+        if (botAvailability < MIN_BOT_AVAILABILITY) {
+            this.logger.warn(`Rejecting request due to low bot availability: ${botAvailability.toFixed(2)}% (threshold: ${MIN_BOT_AVAILABILITY}%)`);
+            throw new HttpException(
+                `Service is currently under heavy load (${botAvailability.toFixed(0)}% availability), please try again later`,
+                HttpStatus.SERVICE_UNAVAILABLE
+            );
+        }
+
+        if (this.queueService.isFull()) {
+            throw new HttpException(
+                `Queue is full (${this.queueService.size()}/${this.MAX_QUEUE_SIZE}), please try again later`,
+                HttpStatus.TOO_MANY_REQUESTS
+            );
         }
 
         return new Promise((resolve, reject) => {
@@ -398,7 +416,6 @@ export class InspectService implements OnModuleInit {
                 });
 
                 try {
-                    // this.logger.debug(`Sending inspect request for asset ${a} to bot`);
                     await bot.inspectItem(m !== '0' && m ? m : s, a, d);
                 } catch (error) {
                     this.logger.error(`Bot inspection error for asset ${a}: ${error.message}`);
