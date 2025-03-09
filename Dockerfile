@@ -17,8 +17,8 @@ COPY . .
 # Build with pnpm (proven to work with the import structure)
 RUN pnpm build
 
-# Production stage with Bun runtime
-FROM oven/bun:1.2.5
+# Production stage with Deno runtime
+FROM denoland/deno:alpine
 
 WORKDIR /app
 
@@ -27,10 +27,22 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 
-# Copy only the static folder that's needed
+# Copy required static files 
 COPY --from=builder /app/static ./static
 
-EXPOSE 3000
-CMD ["sh", "-c", "bun dist/${APP_NAME}.js"]
+# Create and set permissions for sessions directory
+RUN mkdir -p sessions && chmod 777 sessions
 
-# Uses Node.js/pnpm for reliable build but Bun for faster runtime execution
+# Set environment variables
+ENV NODE_PATH=/app/node_modules
+ENV NODE_ENV=production
+
+EXPOSE 3000
+
+# Create entrypoint script to run the app with Deno
+RUN echo '#!/bin/sh\necho "Starting CS2 Inspect Service with Deno..."\ncd /app\ndeno run --allow-net --allow-read --allow-write --allow-env --allow-run --unstable-ffi --unstable-fs --node-modules-dir dist/main.js "$@"' > /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
+
+CMD ["/app/entrypoint.sh"]
+
+# Uses Node.js/pnpm for reliable build but Deno for faster runtime execution
