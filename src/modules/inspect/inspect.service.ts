@@ -173,18 +173,6 @@ export class InspectService implements OnModuleInit {
             }
         }
 
-        // After checking cache, if no cached data exists, then check bot availability
-        const botAvailability = this.getBotAvailabilityPercentage();
-        const MIN_BOT_AVAILABILITY = 40; // 40% threshold
-
-        if (botAvailability < MIN_BOT_AVAILABILITY) {
-            this.logger.warn(`Rejecting request due to low bot availability: ${botAvailability.toFixed(2)}% (threshold: ${MIN_BOT_AVAILABILITY}%)`);
-            throw new HttpException(
-                `Service is currently under heavy load (${botAvailability.toFixed(0)}% availability), please try again later`,
-                HttpStatus.SERVICE_UNAVAILABLE
-            );
-        }
-
         if (this.queueService.isFull()) {
             throw new HttpException(
                 `Queue is full (${this.queueService.size()}/${this.MAX_QUEUE_SIZE}), please try again later`,
@@ -192,43 +180,86 @@ export class InspectService implements OnModuleInit {
             );
         }
 
+        return new Promise((resolve, reject) => {
+            const timeoutId = setTimeout(() => {
+                this.queueService.remove(a);
+                this.timeouts++;
+                reject(new HttpException('Inspection request timed out', HttpStatus.GATEWAY_TIMEOUT));
+            }, this.QUEUE_TIMEOUT);
+
+            // Add to queue before making the request
+            this.queueService.add(a, {
+                ms: m !== '0' && m ? m : s,
+                d,
+                resolve,
+                reject,
+                timeoutId,
+                retryCount: 0,
+                inspectUrl: { s, a, d, m }
+            });
+
+            // Try using the worker manager
+            this.workerManagerService.inspectItem(s, a, d, m)
+                .then(async (response) => {
+                    clearTimeout(timeoutId);
+                    this.success++;
+
+                    try {
+                        const formattedResponse = await this.handleInspectResult(response);
+                        resolve(formattedResponse);
+                    } catch (error) {
+                        this.logger.error(`Error handling inspect result: ${error.message}`);
+                        this.failed++;
+                        reject(new HttpException('Error processing inspection result', HttpStatus.INTERNAL_SERVER_ERROR));
+                    }
+                })
+                .catch(error => {
+                    this.logger.error(`Worker inspection error for asset ${a}: ${error.message}`);
+                    this.failed++;
+                    clearTimeout(timeoutId);
+                    this.queueService.remove(a);
+                    reject(new HttpException(
+                        error.message || 'Inspection failed',
+                        HttpStatus.GATEWAY_TIMEOUT
+                    ));
+                });
+        });
+    }
+
+    private async handleInspectResult(response: any) {
+        const inspectData = this.queueService.get(response.itemid?.toString());
+        if (!inspectData) {
+            this.logger.error(`No inspect data found for item ${response.itemid}`);
+            throw new Error(`No inspect data found for item ${response.itemid}`);
+        }
+
         try {
-            // Try using the worker manager first
-            let response;
-            try {
-                response = await this.workerManagerService.inspectItem(s, a, d, m);
-                this.success++;
-            } catch (workerError) {
-                this.logger.warn(`Worker manager error, falling back to legacy approach: ${workerError.message}`);
+            // Start timing the response
+            const startTime = Date.now();
 
-                // Legacy fallback - might need to be implemented if needed
-                throw new HttpException(
-                    'Bot service currently unavailable',
-                    HttpStatus.SERVICE_UNAVAILABLE
-                );
-            }
+            const uniqueId = this.generateUniqueId({
+                paintSeed: response.paintseed,
+                paintIndex: response.paintindex,
+                paintWear: response.paintwear,
+                defIndex: response.defindex,
+                origin: response.origin,
+                rarity: response.rarity,
+                questId: response.questid,
+                quality: response.quality,
+                dropReason: response.dropreason
+            });
 
-            // Only try to save valid responses
-            if (response && response.iteminfo) {
-                try {
-                    await this.saveAsset(response, { s, a, d, m }, this.generateUniqueId(response.iteminfo));
-                } catch (saveError) {
-                    this.logger.error(`Error saving asset: ${saveError.message}`);
-                    // Continue - don't fail the request if saving fails
-                }
-            } else {
-                this.logger.warn(`Worker returned invalid response: ${JSON.stringify(response)}`);
-            }
+            const history = await this.findHistory(response);
+            await this.saveHistory(response, history, inspectData, uniqueId);
+            const asset = await this.saveAsset(response, inspectData, uniqueId);
 
-            // Always return whatever the worker gave us, even if saving failed
-            return response;
+            const formattedResponse = await this.formatService.formatResponse(asset);
+            return formattedResponse;
         } catch (error) {
-            this.logger.error(`Inspection error for asset ${a}: ${error.message}`);
-            this.failed++;
-            throw new HttpException(
-                error.message || 'Inspection failed',
-                HttpStatus.GATEWAY_TIMEOUT
-            );
+            this.logger.error(`Failed to handle inspect result: ${error.message}`);
+            throw error;
+        } finally {
+            // Cleanup will happen in the inspectItem method
         }
     }
 
@@ -248,117 +279,80 @@ export class InspectService implements OnModuleInit {
         }
     }
 
-    private async findHistory(response: any): Promise<Asset | null> {
-        try {
-            return await this.assetRepository.findOne({
-                where: {
-                    paintWear: response.iteminfo.floatvalue,
-                    paintIndex: response.iteminfo.paintindex,
-                    defIndex: response.iteminfo.defindex,
-                    paintSeed: response.iteminfo.paintseed,
-                    origin: response.iteminfo.origin,
-                }
-            });
-        } catch (error) {
-            this.logger.error(`Error finding history: ${error.message}`);
-            return null;
-        }
+    private async findHistory(response: any) {
+        return await this.assetRepository.findOne({
+            where: {
+                paintWear: response.paintwear,
+                paintIndex: response.paintindex,
+                defIndex: response.defindex,
+                paintSeed: response.paintseed,
+                origin: response.origin,
+                questId: response.questid,
+                rarity: response.rarity,
+            },
+            order: {
+                createdAt: 'DESC',
+            },
+        })
     }
 
-    private async saveHistory(response: any, history: any, inspectData: any, uniqueId: string): Promise<void> {
-        try {
-            const historyEntity = new History();
-            historyEntity.uniqueId = uniqueId;
-            historyEntity.assetId = parseInt(inspectData.a, 10);
-            historyEntity.prevAssetId = history?.assetId;
-            historyEntity.owner = inspectData.ms;
-            historyEntity.prevOwner = history?.owner;
-            historyEntity.stickers = response.iteminfo.stickers || null;
-            historyEntity.prevStickers = history?.stickers || null;
-            historyEntity.keychains = response.iteminfo.keychains || null;
-            historyEntity.prevKeychains = history?.keychains || null;
-            historyEntity.type = this.getHistoryType(response, history, inspectData);
+    private async saveHistory(response: any, history: any, inspectData: any, uniqueId: string) {
+        /*
+        const existing = await this.historyRepository.findOne({
+            where: {
+                assetId: parseInt(response.itemid),
+            },
+        })
 
-            await this.historyRepository.save(historyEntity);
-        } catch (error) {
-            this.logger.error(`Error saving history: ${error.message}`);
+        if (!existing) {
+            await this.historyRepository.upsert({
+                uniqueId,
+                assetId: parseInt(response.itemid),
+                prevAssetId: history?.assetId,
+                owner: inspectData.ms,
+                prevOwner: history?.ms,
+                d: inspectData.d,
+                stickers: response.stickers,
+                keychains: response.keychains,
+                prevStickers: history?.stickers,
+                prevKeychains: history?.keychains,
+                type: this.getHistoryType(response, history, inspectData),
+            }, ['assetId', 'uniqueId'])
         }
-    }
-
-    private getHistoryType(response: any, history: any, inspectData: any): HistoryType {
-        if (!history) {
-            if (response.iteminfo.origin === 8) return HistoryType.TRADED_UP;
-            if (response.iteminfo.origin === 4) return HistoryType.DROPPED;
-            if (response.iteminfo.origin === 1) return HistoryType.PURCHASED_INGAME;
-            if (response.iteminfo.origin === 2) return HistoryType.UNBOXED;
-            if (response.iteminfo.origin === 3) return HistoryType.CRAFTED;
-            return HistoryType.UNKNOWN;
-        }
-
-        // Compare owners to detect trades or market transactions
-        if (history.owner !== inspectData.ms) {
-            if (history.owner?.startsWith('7656')) {
-                return HistoryType.TRADE;
-            }
-            if (history.owner && !history.owner.startsWith('7656')) {
-                return HistoryType.MARKET_BUY;
-            }
-        }
-
-        // Compare stickers or keychains if needed
-        // For now, return UNKNOWN as default
-        return HistoryType.UNKNOWN;
+        */
     }
 
     private async saveAsset(response: any, inspectData: any, uniqueId: string) {
-        try {
-            const history = await this.findHistory(response);
-            if (history) {
-                const historyType = this.getHistoryType(response, history, inspectData);
-                // Use UNKNOWN as a default "no changes" type since NONE isn't defined
-                if (historyType !== HistoryType.UNKNOWN) {
-                    await this.saveHistory(response, history, inspectData, uniqueId);
-                }
-            }
+        await this.assetRepository.upsert({
+            uniqueId,
+            ms: inspectData.ms,
+            d: inspectData.d,
+            assetId: response.itemid,
+            paintSeed: response.paintseed,
+            paintIndex: response.paintindex,
+            paintWear: response.paintwear,
+            customName: response.customname,
+            defIndex: response.defindex,
+            origin: response.origin,
+            rarity: response.rarity,
+            questId: response.questid,
+            stickers: response.stickers,
+            quality: response.quality,
+            keychains: response.keychains,
+            killeaterScoreType: response.killeaterscoretype,
+            killeaterValue: response.killeatervalue,
+            inventory: response.inventory,
+            petIndex: response.petindex,
+            musicIndex: response.musicindex,
+            entIndex: response.entindex,
+            dropReason: response.dropreason,
+        }, ['assetId'])
 
-            // Convert string assetId to number
-            const assetIdNum = parseInt(inspectData.a, 10);
-
-            const existingAsset = await this.assetRepository.findOne({ where: { assetId: assetIdNum } });
-            if (existingAsset) {
-                await this.assetRepository.update({ assetId: assetIdNum }, {
-                    defIndex: response.iteminfo.defindex,
-                    paintIndex: response.iteminfo.paintindex,
-                    rarity: response.iteminfo.rarity,
-                    quality: response.iteminfo.quality,
-                    paintSeed: response.iteminfo.paintseed,
-                    origin: response.iteminfo.origin,
-                    paintWear: response.iteminfo.floatvalue,
-                    stickers: response.iteminfo.stickers || null,
-                    keychains: response.iteminfo.keychains || null,
-                    uniqueId: uniqueId,
-                    updatedAt: new Date()
-                });
-            } else {
-                const asset = new Asset();
-                asset.assetId = assetIdNum;
-                asset.defIndex = response.iteminfo.defindex;
-                asset.paintIndex = response.iteminfo.paintindex;
-                asset.rarity = response.iteminfo.rarity;
-                asset.quality = response.iteminfo.quality;
-                asset.paintSeed = response.iteminfo.paintseed;
-                asset.origin = response.iteminfo.origin;
-                asset.stickers = response.iteminfo.stickers || null;
-                asset.keychains = response.iteminfo.keychains || null;
-                asset.paintWear = response.iteminfo.floatvalue;
-                asset.uniqueId = uniqueId;
-                asset.createdAt = new Date();
-                asset.updatedAt = new Date();
-                await this.assetRepository.save(asset);
-            }
-        } catch (e) {
-            this.logger.error(`Error saving asset: ${e.message}`);
-        }
+        return await this.assetRepository.findOne({
+            where: {
+                assetId: parseInt(response.itemid),
+            },
+        })
     }
 
     private generateUniqueId(item: {
@@ -372,23 +366,19 @@ export class InspectService implements OnModuleInit {
         quality?: number,
         dropReason?: number
     }): string {
-        try {
-            const data = {
-                d: item.defIndex || 0,
-                p: item.paintIndex || 0,
-                s: item.paintSeed || 0,
-                w: item.paintWear || 0,
-                o: item.origin || 0,
-                r: item.rarity || 0,
-                q: item.quality || 0,
-                qid: item.questId || 0,
-                dr: item.dropReason || 0
-            }
-            return createHash('md5').update(JSON.stringify(data)).digest('hex')
-        } catch (e) {
-            this.logger.error(`Error generating unique ID: ${e.message}`)
-            return ''
-        }
+        const values = [
+            item.paintSeed || 0,
+            item.paintIndex || 0,
+            item.paintWear || 0,
+            item.defIndex || 0,
+            item.origin || 0,
+            item.rarity || 0,
+            item.questId || 0,
+            item.quality || 0,
+            item.dropReason || 0
+        ]
+        const stringToHash = values.join('-')
+        return createHash('sha1').update(stringToHash).digest('hex').substring(0, 8)
     }
 
     // Implement the remaining methods (findHistory, saveHistory, getHistoryType, etc.)
