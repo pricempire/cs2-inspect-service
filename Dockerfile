@@ -1,4 +1,4 @@
-FROM node:20 AS builder
+FROM node:23.9 AS builder
 
 WORKDIR /app
 
@@ -17,8 +17,8 @@ COPY . .
 # Build with pnpm (proven to work with the import structure)
 RUN pnpm build
 
-# Production stage with Deno runtime
-FROM denoland/deno:alpine
+# Production stage with Node.js 23.9
+FROM node:23.9-slim
 
 WORKDIR /app
 
@@ -34,12 +34,14 @@ COPY --from=builder /app/static ./static
 RUN mkdir -p sessions && chmod 777 sessions
 
 # Set environment variables
-ENV NODE_PATH=/app/node_modules
 ENV NODE_ENV=production
+
+# Increase memory limit for Node.js to handle bot initialization
+ENV NODE_OPTIONS="--max-old-space-size=8096"
 
 EXPOSE 3000
 
-# Direct command to run the application with Deno
-CMD ["deno", "run", "--allow-net", "--allow-read", "--allow-write", "--allow-env", "--allow-run", "--unstable-ffi", "--unstable-fs", "--node-modules-dir", "dist/main.js"]
+# Run with Node.js
+CMD ["node", "dist/main.js"]
 
-# Uses Node.js/pnpm for reliable build but Deno for faster runtime execution
+# Using Node.js 23.9 for reliable operation with bot initialization
