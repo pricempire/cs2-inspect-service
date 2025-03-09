@@ -1,14 +1,14 @@
-FROM node:20
+FROM oven/bun:latest
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
-RUN npm install -g pnpm && pnpm install --frozen-lockfile
+COPY package.json bun.lockb ./
+RUN bun install --frozen-lockfile
 
 COPY . .
-RUN pnpm build
+RUN bun build
 
 EXPOSE 3000
-CMD ["sh", "-c", "node dist/${APP_NAME}.js"]
+CMD ["sh", "-c", "bun dist/${APP_NAME}.js"]
 
-# remove bun because of prod issues
+# Using Bun for improved performance and faster initialization

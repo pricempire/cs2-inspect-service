@@ -67,7 +67,27 @@ export class InspectService implements OnModuleInit {
     async onModuleInit() {
         this.logger.debug('Starting Inspect Module...')
         this.accounts = await this.loadAccounts()
-        this.initializeAllBots()
+
+        // Add a global timeout protection to ensure the service starts even if some bots hang
+        const SERVICE_INIT_TIMEOUT = parseInt(process.env.SERVICE_INIT_TIMEOUT || '60000'); // 60 second service startup timeout
+
+        try {
+            // Create a promise for the initial bots initialization with timeout protection
+            const initPromise = this.initializeAllBots();
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error(`Service initialization timed out after ${SERVICE_INIT_TIMEOUT}ms`)),
+                    SERVICE_INIT_TIMEOUT)
+            );
+
+            // Race between normal initialization and timeout
+            await Promise.race([initPromise, timeoutPromise]);
+            this.logger.log('Inspect Module initialization completed successfully');
+        } catch (error) {
+            // Log the error but allow the service to start anyway with whatever bots are ready
+            this.logger.error(`Init module error: ${error.message}. Starting with ${this.bots.size} bots.`);
+        }
+
+        this.logger.log(`Service ready with ${Array.from(this.bots.values()).filter(bot => bot.isReady()).length} active bots`);
     }
 
     private async loadAccounts(): Promise<string[]> {
@@ -122,6 +142,7 @@ export class InspectService implements OnModuleInit {
         const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3');
         const INIT_TIMEOUT = parseInt(process.env.INIT_TIMEOUT || '30000'); // 30 second timeout for initialization
         const PRIORITIZE_COUNT = parseInt(process.env.PRIORITIZE_COUNT || '20'); // Number of bots to prioritize
+        const BACKGROUND_INIT = process.env.BACKGROUND_INIT === 'true';
 
         const sessionPath = process.env.SESSION_PATH || './sessions';
         if (!fs.existsSync(sessionPath)) {
@@ -175,75 +196,77 @@ export class InspectService implements OnModuleInit {
             this.logger.log(`${remainingBatch.length} remaining bots will be initialized after priority batch`);
         }
 
-        // Use a semaphore-like approach to control concurrency
-        let activeInitializations = 0;
-        let completed = 0;
-        let aborted = false;
-
-        // Create a promise that resolves when all accounts are processed
+        // Process accounts function with proper promise handling
         const processAccounts = async (accounts) => {
-            // Process accounts in small batches to avoid memory issues
-            while (accounts.length > 0 && !aborted) {
-                // Take next batch based on available slots
-                const availableSlots = MAX_CONCURRENT - activeInitializations;
-                if (availableSlots <= 0) {
-                    // Wait a short time before checking again
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    continue;
+            let processed = 0;
+            const pool = new Set(); // Track active promises
+
+            while (processed < accounts.length || pool.size > 0) {
+                // Start new initializations if capacity allows and there are accounts left
+                while (pool.size < MAX_CONCURRENT && processed < accounts.length) {
+                    const account = accounts[processed++];
+                    const [username, password] = account.split(':');
+
+                    // Create the initialization promise with timeout
+                    const initWithTimeout = async () => {
+                        try {
+                            const initPromise = this.initializeBot(username, password, MAX_RETRIES, sessionPath);
+                            const timeoutPromise = new Promise((_, reject) => {
+                                const timeoutId = setTimeout(() => {
+                                    reject(new Error(`Initialization timeout for ${username} after ${INIT_TIMEOUT}ms`));
+                                }, INIT_TIMEOUT);
+
+                                // Allow timeout to be garbage collected if promise resolves
+                                return () => clearTimeout(timeoutId);
+                            });
+
+                            await Promise.race([initPromise, timeoutPromise]);
+                        } catch (error) {
+                            this.logger.error(`Failed during initialization process: ${error.message}`);
+                        }
+                    };
+
+                    // Create a promise that will remove itself from the pool when done
+                    const promise = initWithTimeout().finally(() => {
+                        pool.delete(promise);
+                    });
+
+                    // Add to the active pool
+                    pool.add(promise);
                 }
 
-                const nextBatch = accounts.splice(0, availableSlots);
-                activeInitializations += nextBatch.length;
-
-                // Start initialization for this batch
-                nextBatch.forEach(async (account) => {
-                    try {
-                        const [username, password] = account.split(':');
-
-                        // Set a timeout for initialization to prevent getting stuck
-                        const initPromise = this.initializeBot(username, password, MAX_RETRIES, sessionPath);
-                        const timeoutPromise = new Promise((_, reject) => {
-                            setTimeout(() => reject(new Error(`Initialization timeout for ${username} after ${INIT_TIMEOUT}ms`)), INIT_TIMEOUT);
-                        });
-
-                        await Promise.race([initPromise, timeoutPromise]);
-                    } catch (error) {
-                        this.logger.error(`Failed during initialization process: ${error.message}`);
-                    } finally {
-                        activeInitializations--;
-                        completed++;
-
-                        // Log progress periodically
-                        if (completed % 10 === 0 || completed === initialBatch.length) {
-                            this.logger.log(`Bot initialization progress: ${completed}/${initialBatch.length}`);
-                        }
-
-                        // Very short delay to prevent event loop starvation
-                        await new Promise(resolve => setTimeout(resolve, 10));
-                    }
-                });
-
-                // Small delay between batches to prevent event loop starvation
-                await new Promise(resolve => setTimeout(resolve, 50));
+                // If pool is full or no more accounts to process, wait for at least one promise to complete
+                if (pool.size > 0) {
+                    await Promise.race(Array.from(pool));
+                }
             }
+
+            // Make sure to log the completion
+            const readyBotsCount = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
+            this.logger.log(`Completed processing ${accounts.length} accounts, ${readyBotsCount} bots are ready`);
         };
 
-        // Process priority batch first
-        await processAccounts([...initialBatch]);
+        // Process priority batch first and wait for it to complete
+        await processAccounts(initialBatch);
 
-        // If we have enough bots ready after initial batch, start handling requests
-        // while remaining bots initialize in the background
+        // If there are remaining bots and background init is enabled, start them in the background
         const readyBotsCount = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
         if (readyBotsCount > 0 && remainingBatch.length > 0) {
-            this.logger.log(`${readyBotsCount} bots ready. Starting background initialization for remaining ${remainingBatch.length} bots.`);
+            if (BACKGROUND_INIT) {
+                this.logger.log(`${readyBotsCount} bots ready. Starting background initialization for remaining ${remainingBatch.length} bots.`);
 
-            // Start processing remaining accounts in the background
-            processAccounts([...remainingBatch]).catch(error => {
-                this.logger.error(`Error in background initialization: ${error.message}`);
-            });
+                // Process remaining accounts in the background (no await)
+                processAccounts(remainingBatch).catch(error => {
+                    this.logger.error(`Error in background initialization: ${error.message}`);
+                });
+            } else {
+                this.logger.log(`${readyBotsCount} bots ready. Continuing with initialization of remaining ${remainingBatch.length} bots.`);
+                await processAccounts(remainingBatch);
+            }
         }
 
-        this.logger.log(`Finished initializing priority batch with ${this.bots.size} bots, ${readyBotsCount} ready`);
+        this.logger.log(`Initialization complete with ${this.bots.size} total bots, ${readyBotsCount} ready`);
+        return readyBotsCount;
     }
 
     private async initializeBot(username: string, password: string, maxRetries: number, sessionPath: string): Promise<void> {
