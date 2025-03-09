@@ -27,6 +27,9 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 
+# Copy only the static folder that's needed
+COPY --from=builder /app/static ./static
+
 EXPOSE 3000
 CMD ["sh", "-c", "bun dist/${APP_NAME}.js"]
 
