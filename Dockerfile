@@ -9,7 +9,8 @@ RUN bun install
 
 # Copy the rest of the application
 COPY . .
-RUN bun build
+# Run the build script from package.json instead of direct bun build command
+RUN bun run build
 
 EXPOSE 3000
 CMD ["sh", "-c", "bun dist/${APP_NAME}.js"]
