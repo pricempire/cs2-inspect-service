@@ -18,7 +18,7 @@ COPY . .
 RUN pnpm build
 
 # Production stage with Bun runtime
-FROM oven/bun:latest
+FROM oven/bun:1.2.5
 
 WORKDIR /app
 
