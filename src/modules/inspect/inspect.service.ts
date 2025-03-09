@@ -118,7 +118,7 @@ export class InspectService implements OnModuleInit {
     }
 
     private async initializeAllBots() {
-        const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || '100');
+        const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_INIT || '5'); // Limit concurrent initializations
         const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3');
 
         const sessionPath = process.env.SESSION_PATH || './sessions';
@@ -127,72 +127,112 @@ export class InspectService implements OnModuleInit {
             this.logger.debug(`Created session directory at: ${sessionPath}`);
         }
 
-        for (let i = 0; i < this.accounts.length; i += BATCH_SIZE) {
-            const batch = this.accounts.slice(i, i + BATCH_SIZE);
-            const initPromises = batch.map(async (account) => {
-                const [username, password] = account.split(':');
+        // Create a queue for initialization
+        const initQueue = this.accounts.filter(account => {
+            const [username] = account.split(':');
+            const throttleExpiry = this.throttledAccounts.get(username);
+            return !(throttleExpiry && Date.now() < throttleExpiry);
+        });
 
-                // Check if account is throttled
-                const throttleExpiry = this.throttledAccounts.get(username);
-                if (throttleExpiry && Date.now() < throttleExpiry) {
-                    this.logger.warn(`Account ${username} is throttled. Skipping initialization.`);
-                    return;
-                }
+        this.logger.log(`Starting initialization of ${initQueue.length} bots with max concurrency of ${MAX_CONCURRENT}`);
 
-                let retryCount = 0;
-                let initialized = false;
+        // Use a semaphore-like approach to control concurrency
+        let activeInitializations = 0;
+        let completed = 0;
 
-                while (retryCount < MAX_RETRIES && !initialized) {
-                    try {
-                        const bot = new Bot({
-                            username,
-                            password,
-                            proxyUrl: process.env.PROXY_URL,
-                            debug: process.env.DEBUG === 'true',
-                            sessionPath,
-                            blacklistPath: process.env.BLACKLIST_PATH || './blacklist.txt',
-                            inspectTimeout: 10000,
-                        });
+        // Process accounts in small batches to avoid memory issues
+        while (initQueue.length > 0) {
+            // Take next batch based on available slots
+            const availableSlots = MAX_CONCURRENT - activeInitializations;
+            if (availableSlots <= 0) {
+                // Wait a short time before checking again
+                await new Promise(resolve => setTimeout(resolve, 100));
+                continue;
+            }
 
-                        bot.on('inspectResult', (response) => this.handleInspectResult(username, response));
-                        bot.on('error', (error) => {
-                            this.logger.error(`Bot ${username} error: ${error}`);
-                        });
+            const nextBatch = initQueue.splice(0, availableSlots);
+            activeInitializations += nextBatch.length;
 
-                        await bot.initialize();
-                        this.bots.set(username, bot);
-                        this.logger.debug(`Bot ${username} initialized successfully`);
-                        initialized = true;
-                        // Clear throttle status if successful
-                        this.throttledAccounts.delete(username);
+            // Start initialization for this batch
+            nextBatch.forEach(async (account) => {
+                try {
+                    const [username, password] = account.split(':');
+                    await this.initializeBot(username, password, MAX_RETRIES, sessionPath);
+                } catch (error) {
+                    this.logger.error(`Failed during initialization process: ${error.message}`);
+                } finally {
+                    activeInitializations--;
+                    completed++;
 
-                    } catch (error) {
-                        if (error.message === 'ACCOUNT_DISABLED') {
-                            this.logger.error(`Account ${username} is disabled. Blacklisting...`);
-                            this.accounts = this.accounts.filter(acc => !acc.startsWith(username));
-                            break;
-                        } else if (error.message === 'LOGIN_THROTTLED') {
-                            this.logger.warn(`Account ${username} is throttled. Adding to cooldown.`);
-                            this.throttledAccounts.set(username, Date.now() + this.THROTTLE_COOLDOWN);
-                            break;
-                        } else if (error.message === 'INITIALIZATION_ERROR') {
-                            this.logger.warn(`Initialization timeout for bot ${username}. Retrying...`);
-                            if (retryCount >= MAX_RETRIES) {
-                                this.logger.error(`Max retries reached for bot ${username}. Initialization failed.`);
-                            }
-                        } else {
-                            this.logger.error(`Failed to initialize bot ${username}: ${error.message}`);
-                        }
-                        retryCount++;
+                    // Log progress periodically
+                    if (completed % 10 === 0 || completed === this.accounts.length) {
+                        this.logger.log(`Bot initialization progress: ${completed}/${this.accounts.length}`);
                     }
+
+                    // Add a small delay between completions to prevent event loop starvation
+                    await new Promise(resolve => setTimeout(resolve, 50));
                 }
             });
 
-            await Promise.allSettled(initPromises);
-            this.logger.debug(`Initialized batch of ${batch.length} bots (${i + batch.length}/${this.accounts.length} total)`);
+            // Add a small delay between batches to prevent event loop starvation
+            await new Promise(resolve => setTimeout(resolve, 200));
         }
 
-        this.logger.debug(`Finished initializing ${this.bots.size} bots`);
+        this.logger.log(`Finished initializing ${this.bots.size} bots`);
+    }
+
+    private async initializeBot(username: string, password: string, maxRetries: number, sessionPath: string): Promise<void> {
+        let retryCount = 0;
+
+        while (retryCount < maxRetries) {
+            try {
+                const bot = new Bot({
+                    username,
+                    password,
+                    proxyUrl: process.env.PROXY_URL,
+                    debug: process.env.DEBUG === 'true',
+                    sessionPath,
+                    blacklistPath: process.env.BLACKLIST_PATH || './blacklist.txt',
+                    inspectTimeout: 10000,
+                });
+
+                bot.on('inspectResult', (response) => this.handleInspectResult(username, response));
+                bot.on('error', (error) => {
+                    this.logger.error(`Bot ${username} error: ${error}`);
+                });
+
+                await bot.initialize();
+                this.bots.set(username, bot);
+                this.logger.debug(`Bot ${username} initialized successfully`);
+
+                // Clear throttle status if successful
+                this.throttledAccounts.delete(username);
+                return;
+
+            } catch (error) {
+                if (error.message === 'ACCOUNT_DISABLED') {
+                    this.logger.error(`Account ${username} is disabled. Blacklisting...`);
+                    this.accounts = this.accounts.filter(acc => !acc.startsWith(username));
+                    return;
+                } else if (error.message === 'LOGIN_THROTTLED') {
+                    this.logger.warn(`Account ${username} is throttled. Adding to cooldown.`);
+                    this.throttledAccounts.set(username, Date.now() + this.THROTTLE_COOLDOWN);
+                    return;
+                } else if (error.message === 'INITIALIZATION_ERROR') {
+                    this.logger.warn(`Initialization timeout for bot ${username}. Retrying...`);
+                    if (retryCount >= maxRetries - 1) {
+                        this.logger.error(`Max retries reached for bot ${username}. Initialization failed.`);
+                    }
+                } else {
+                    this.logger.error(`Failed to initialize bot ${username}: ${error.message}`);
+                }
+                retryCount++;
+            }
+
+            // Add a delay between retries with jitter to prevent thundering herd
+            const jitter = Math.random() * 500;
+            await new Promise(resolve => setTimeout(resolve, 500 + jitter));
+        }
     }
 
     public stats() {
