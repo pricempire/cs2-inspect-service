@@ -39,10 +39,7 @@ ENV NODE_ENV=production
 
 EXPOSE 3000
 
-# Create entrypoint script to run the app with Deno
-RUN echo '#!/bin/sh\necho "Starting CS2 Inspect Service with Deno..."\ncd /app\ndeno run --allow-net --allow-read --allow-write --allow-env --allow-run --unstable-ffi --unstable-fs --node-modules-dir dist/main.js "$@"' > /app/entrypoint.sh && \
-    chmod +x /app/entrypoint.sh
-
-CMD ["/app/entrypoint.sh"]
+# Direct command to run the application with Deno
+CMD ["deno", "run", "--allow-net", "--allow-read", "--allow-write", "--allow-env", "--allow-run", "--unstable-ffi", "--unstable-fs", "--node-modules-dir", "dist/main.js"]
 
 # Uses Node.js/pnpm for reliable build but Deno for faster runtime execution
