@@ -259,7 +259,7 @@ class BotWorker {
         });
 
         // Log stats for debugging
-        this.logger.debug(`Worker ${this.workerId} stats: ready=${readyBots}, busy=${busyBots}, cooldown=${cooldownBots}, error=${errorBots}, disconnected=${disconnectedBots}, total=${totalBots}`);
+        // this.logger.debug(`Worker ${this.workerId} stats: ready=${readyBots}, busy=${busyBots}, cooldown=${cooldownBots}, error=${errorBots}, disconnected=${disconnectedBots}, total=${totalBots}`);
 
         this.sendToParent({
             type: 'stats',

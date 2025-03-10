@@ -363,9 +363,11 @@ export class WorkerManagerService implements OnModuleInit {
             }
 
             // Log stats periodically (to reduce log spam, only log when ready bots change)
+            /*
             if (stats.readyBots > 0) {
                 this.logger.debug(`Worker ${workerId} stats: ready=${stats.readyBots}, busy=${stats.busyBots}, total=${stats.totalBots}`);
             }
+            */
         }
     }
 
