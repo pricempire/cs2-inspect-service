@@ -87,7 +87,7 @@ class BotWorker {
                         debug: process.env.DEBUG === 'true',
                         sessionPath,
                         blacklistPath: process.env.BLACKLIST_PATH || './blacklist.txt',
-                        inspectTimeout: 2000,
+                        inspectTimeout: 1000,
                     });
 
                     // Forward bot events to parent process
