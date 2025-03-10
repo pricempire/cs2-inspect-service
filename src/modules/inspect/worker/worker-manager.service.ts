@@ -9,6 +9,7 @@ import * as path from 'path';
 import { createHash } from 'crypto';
 import { Worker } from 'worker_threads';
 import { spawnWorker } from './spawn-worker';
+import { BotStatus } from '../bot.class';
 
 interface WorkerInfo {
     id: number;
@@ -60,6 +61,17 @@ export class WorkerManagerService implements OnModuleInit {
 
     private retriedInspections = 0;
     private successAfterRetry = 0;
+
+    // Track response times for statistics
+    private responseTimesHistory: Array<{
+        timestamp: number;
+        duration: number;
+        assetId: string;
+        success: boolean;
+    }> = [];
+
+    // Keep track of the last 5 minutes of inspections
+    private readonly STATS_HISTORY_PERIOD = 5 * 60 * 1000; // 5 minutes in ms
 
     constructor(
         @InjectRepository(Asset)
@@ -310,7 +322,7 @@ export class WorkerManagerService implements OnModuleInit {
 
         try {
             clearTimeout(request.timeoutId);
-            this.success++;
+            this.trackInspectionSuccess(assetId, Date.now() - request.startTime!);
             request.resolve(result);
         } catch (error) {
             this.logger.error(`Error handling inspect result: ${error.message}`);
@@ -330,7 +342,7 @@ export class WorkerManagerService implements OnModuleInit {
         }
 
         clearTimeout(request.timeoutId);
-        this.failed++;
+        this.trackInspectionFailure(assetId, Date.now() - request.startTime);
         request.reject(new Error(error));
         this.inspectRequests.delete(assetId);
     }
@@ -499,78 +511,84 @@ export class WorkerManagerService implements OnModuleInit {
         resolve: (value: any) => void,
         reject: (reason?: any) => void
     ): void {
-        // Clean up the current request
-        this.inspectRequests.delete(a);
+        const assetId = a;
+        const request = this.inspectRequests.get(assetId);
 
-        // Check if we can retry
+        if (!request) {
+            this.logger.warn(`Cannot handle timeout for request ${requestId} - request not found`);
+            return;
+        }
+
+        // Calculate duration if we have a start time
+        const duration = request.startTime ? Date.now() - request.startTime : undefined;
+
         if (retryCount < maxRetries) {
-            // Increment retry count
-            const nextRetryCount = retryCount + 1;
-
-            // Track the retry
+            // We still have retries left
             this.incrementRetriedInspections();
+            this.logger.warn(`Inspection timeout for asset ${assetId} (attempt ${retryCount + 1}/${maxRetries + 1}). Retrying with a different bot...`);
 
-            this.logger.warn(`Inspection timeout for asset ${a}. Retrying with a different bot (attempt ${nextRetryCount}/${maxRetries})`);
+            // Remove the current request from the map
+            this.inspectRequests.delete(assetId);
 
             // Try again with a different bot
-            this.executeInspection(s, a, d, m, requestId, nextRetryCount)
+            this.executeInspection(s, a, d, m, requestId, retryCount + 1)
                 .then(result => {
-                    // Track successful retry
                     this.incrementSuccessAfterRetry();
                     resolve(result);
                 })
-                .catch(reject);
+                .catch(error => {
+                    reject(error);
+                });
         } else {
-            // We've used all our retries
-            this.logger.error(`Inspection failed after ${maxRetries} retry attempts for asset ${a}`);
+            // No more retries left, report as timeout
             this.timeouts++;
-            reject(new Error(`Inspection timed out after ${maxRetries} retry attempts`));
+            this.logger.error(`All retry attempts exhausted for asset ${assetId}. Reporting as timeout.`);
+
+            // Track the timeout in our metrics
+            if (duration) {
+                this.trackInspectionTime(assetId, duration, false);
+            }
+
+            this.inspectRequests.delete(assetId);
+            reject(new Error(`Inspection timed out after ${maxRetries + 1} attempts`));
         }
     }
 
     public getStats() {
-        // Aggregate stats from all workers
-        const readyBots = this.workers.reduce((sum, w) => sum + w.stats.readyBots, 0);
-        const busyBots = this.workers.reduce((sum, w) => sum + w.stats.busyBots, 0);
-        const cooldownBots = this.workers.reduce((sum, w) => sum + w.stats.cooldownBots, 0);
-        const errorBots = this.workers.reduce((sum, w) => sum + w.stats.errorBots, 0);
-        const disconnectedBots = this.workers.reduce((sum, w) => sum + w.stats.disconnectedBots, 0);
-        const totalBots = this.workers.reduce((sum, w) => sum + w.stats.totalBots, 0);
+        // Count bots in each state
+        const readyBots = this.getReadyBots();
+        const totalBots = this.getTotalBots();
+        const busyBots = Array.from(this.bots.values()).filter(bot => bot.currentStatus === BotStatus.BUSY).length;
+        const errorBots = Array.from(this.bots.values()).filter(bot => bot.currentStatus === BotStatus.ERROR).length;
+        const cooldownBots = Array.from(this.bots.values()).filter(bot => bot.currentStatus === BotStatus.COOLDOWN).length;
+        const disconnectedBots = Array.from(this.bots.values()).filter(bot => bot.currentStatus === BotStatus.DISCONNECTED).length;
 
-        // Compile detailed stats about each worker
-        const workerDetails = this.workers.map(worker => ({
-            id: worker.id,
-            status: worker.status,
-            bots: worker.stats.totalBots,
-            ready: worker.stats.readyBots,
-            busy: worker.stats.busyBots,
-            cooldown: worker.stats.cooldownBots,
-            error: worker.stats.errorBots,
-            disconnected: worker.stats.disconnectedBots
-        }));
-
-        // Flatten all bot details from all workers
-        const botDetails = this.workers.flatMap(w => w.stats.botDetails || []);
-
-        // Calculate active inspections from the inspectRequests map
+        // Active inspections
         const activeInspections = this.inspectRequests.size;
-
-        // Calculate average request time for active inspections
-        const inspectionTimes = Array.from(this.inspectRequests.values())
-            .filter(req => req.startTime)
-            .map(req => Date.now() - req.startTime!);
-
-        const avgInspectionTime = inspectionTimes.length > 0
-            ? inspectionTimes.reduce((sum, time) => sum + time, 0) / inspectionTimes.length
-            : 0;
-
-        // Get active inspection details
-        const activeInspectionDetails = Array.from(this.inspectRequests.entries())
-            .map(([assetId, req]) => ({
+        const activeInspectionDetails = Array.from(this.inspectRequests.entries()).map(([assetId, request]) => {
+            const elapsedTime = request.startTime ? Date.now() - request.startTime : 0;
+            return {
                 assetId,
-                elapsedMs: req.startTime ? Date.now() - req.startTime : 0,
-                startedAt: req.startTime ? new Date(req.startTime).toISOString() : null
-            }));
+                elapsedTimeMs: elapsedTime,
+                startedAt: request.startTime,
+                formattedTime: `${Math.floor(elapsedTime / 1000)}s ${elapsedTime % 1000}ms`,
+                retry: request.retryCount || 0
+            };
+        });
+
+        // Calculate bot availability
+        const botAvailabilityPercentage = this.getBotAvailabilityPercentage();
+
+        // Bot details for admin view
+        const botDetails = Array.from(this.bots.entries()).map(([username, bot]) => {
+            return {
+                username,
+                state: bot.currentStatus,
+                lastUsed: new Date().getTime(), // Default to current time
+                successfulInspections: 0,
+                failedInspections: 0
+            };
+        });
 
         return {
             readyBots,
@@ -579,14 +597,28 @@ export class WorkerManagerService implements OnModuleInit {
             errorBots,
             disconnectedBots,
             totalBots,
-            workers: this.workers.length,
-            workerDetails,
-            botDetails,
             activeInspections,
-            avgInspectionTime: Math.round(avgInspectionTime),
-            activeInspectionDetails: activeInspectionDetails.slice(0, 10), // Limit to 10 for UI display
-            retriedInspections: this.retriedInspections,
-            successAfterRetry: this.successAfterRetry
+            botAvailabilityPercentage,
+            metrics: {
+                readyBots,
+                busyBots,
+                cooldownBots,
+                errorBots,
+                disconnectedBots,
+                totalBots,
+                botAvailabilityPercentage,
+                activeInspections,
+                activeInspectionDetails: activeInspectionDetails.slice(0, 10), // Limit to 10 for UI display
+                retriedInspections: this.retriedInspections,
+                successAfterRetry: this.successAfterRetry,
+                responseTimeStats: this.getResponseTimeStats(),
+                success: this.success,
+                failed: this.failed,
+                cached: this.cached,
+                timeouts: this.timeouts,
+                botDetails
+            },
+            responseTimeStats: this.getResponseTimeStats()
         };
     }
 
@@ -596,5 +628,107 @@ export class WorkerManagerService implements OnModuleInit {
 
     private incrementSuccessAfterRetry() {
         this.successAfterRetry++;
+    }
+
+    // Track a successful inspection with its response time
+    private trackInspectionSuccess(assetId: string, duration: number) {
+        this.success++;
+        this.trackInspectionTime(assetId, duration, true);
+    }
+
+    // Track a failed inspection with its response time (if available)
+    private trackInspectionFailure(assetId: string, duration?: number) {
+        this.failed++;
+        if (duration !== undefined) {
+            this.trackInspectionTime(assetId, duration, false);
+        }
+    }
+
+    // Record response time data with timestamp
+    private trackInspectionTime(assetId: string, duration: number, success: boolean) {
+        const now = Date.now();
+
+        // Add new record
+        this.responseTimesHistory.push({
+            timestamp: now,
+            duration,
+            assetId,
+            success
+        });
+
+        // Clean up old records (older than 5 minutes)
+        const cutoffTime = now - this.STATS_HISTORY_PERIOD;
+        this.responseTimesHistory = this.responseTimesHistory.filter(
+            record => record.timestamp >= cutoffTime
+        );
+    }
+
+    // Get response time statistics
+    private getResponseTimeStats() {
+        // Get current time for filtering recent data
+        const now = Date.now();
+        const recentCutoff = now - this.STATS_HISTORY_PERIOD;
+
+        // Filter for successful inspections only
+        const allSuccessful = this.responseTimesHistory.filter(r => r.success);
+        const recentSuccessful = allSuccessful.filter(r => r.timestamp >= recentCutoff);
+
+        // Calculate average response times
+        const calculateAvg = (items: typeof allSuccessful) => {
+            if (items.length === 0) return 0;
+            return Math.round(items.reduce((sum, r) => sum + r.duration, 0) / items.length);
+        };
+
+        // Get percentiles
+        const getPercentile = (items: typeof allSuccessful, percentile: number) => {
+            if (items.length === 0) return 0;
+            const sorted = [...items].sort((a, b) => a.duration - b.duration);
+            const index = Math.floor(sorted.length * (percentile / 100));
+            return sorted[index].duration;
+        };
+
+        // Prepare time-series data for recent inspections (for charting)
+        const timeSeriesData = recentSuccessful
+            .sort((a, b) => a.timestamp - b.timestamp)
+            .map(record => ({
+                timestamp: record.timestamp,
+                duration: record.duration
+            }));
+
+        // Group time series data by minute for charting
+        const minuteBuckets: Record<string, number[]> = {};
+        recentSuccessful.forEach(record => {
+            // Create minute buckets (floor to nearest minute)
+            const minute = Math.floor(record.timestamp / 60000) * 60000;
+            if (!minuteBuckets[minute]) {
+                minuteBuckets[minute] = [];
+            }
+            minuteBuckets[minute].push(record.duration);
+        });
+
+        // Calculate average per minute
+        const timeSeriesByMinute = Object.entries(minuteBuckets).map(([timestamp, durations]) => ({
+            timestamp: parseInt(timestamp),
+            avgDuration: Math.round(durations.reduce((sum, d) => sum + d, 0) / durations.length),
+            count: durations.length
+        })).sort((a, b) => a.timestamp - b.timestamp);
+
+        return {
+            allTime: {
+                count: allSuccessful.length,
+                avgResponseTime: calculateAvg(allSuccessful),
+                p50: allSuccessful.length > 0 ? getPercentile(allSuccessful, 50) : 0,
+                p90: allSuccessful.length > 0 ? getPercentile(allSuccessful, 90) : 0,
+                p95: allSuccessful.length > 0 ? getPercentile(allSuccessful, 95) : 0,
+            },
+            recent: {
+                count: recentSuccessful.length,
+                avgResponseTime: calculateAvg(recentSuccessful),
+                p50: recentSuccessful.length > 0 ? getPercentile(recentSuccessful, 50) : 0,
+                p90: recentSuccessful.length > 0 ? getPercentile(recentSuccessful, 90) : 0,
+                p95: recentSuccessful.length > 0 ? getPercentile(recentSuccessful, 95) : 0,
+                timeSeriesData: timeSeriesByMinute
+            }
+        };
     }
 } 

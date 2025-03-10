@@ -306,5 +306,15 @@ class BotWorker {
     }
 }
 
+process.on('uncaughtException', err => {
+    // console.log(`Uncaught Exception: ${err.message}`)
+    // process.exit(1)
+})
+process.on('unhandledRejection', (reason, promise) => {
+    // console.log('Unhandled rejection at ', promise, `reason: ${reason.message}`)
+    // process.exit(1)
+})
+
+
 // Start the worker
-new BotWorker(); 
+new BotWorker();

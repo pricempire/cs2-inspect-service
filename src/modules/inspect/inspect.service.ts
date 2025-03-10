@@ -82,10 +82,8 @@ export class InspectService implements OnModuleInit {
         }
     }
 
-    // Use worker manager for bot stats
     public stats() {
-        const workerStats = this.workerManagerService.getStats();
-        const queueUtilization = (this.inspects.size / this.MAX_QUEUE_SIZE) * 100;
+        const stats = this.workerManagerService.getStats();
 
         // Calculate uptime
         const uptime = Date.now() - this.startTime;
@@ -94,64 +92,58 @@ export class InspectService implements OnModuleInit {
         const minutes = Math.floor((uptime % (60 * 60 * 1000)) / (60 * 1000));
         const seconds = Math.floor((uptime % (60 * 1000)) / 1000);
 
+        // Get response time stats and metrics from the correct path
+        const responseTimeStats = stats.responseTimeStats;
+        const metrics = stats.metrics;
+
+        // Return a clean, well-organized stats structure
         return {
-            status: workerStats.readyBots > 0 ? 'ready' : 'initializing',
-            uptime: `${days}d ${hours}h ${minutes}m ${seconds}s`,
-            bots: {
-                ready: workerStats.readyBots,
-                busy: workerStats.busyBots,
-                cooldown: workerStats.cooldownBots,
-                disconnected: workerStats.disconnectedBots,
-                error: workerStats.errorBots,
-                total: workerStats.totalBots,
-                availability: this.workerManagerService.getBotAvailabilityPercentage().toFixed(2) + '%',
-                utilization: (workerStats.totalBots > 0 ? (workerStats.busyBots / workerStats.totalBots) * 100 : 0).toFixed(2) + '%',
-                workers: workerStats.workers,
-                workerDetails: workerStats.workerDetails
+            uptime: {
+                total_ms: uptime,
+                formatted: `${days}d ${hours}h ${minutes}m ${seconds}s`,
             },
-            metrics: {
-                success: {
-                    rate: ((this.success / (this.success + this.failed + this.cached + this.timeouts)) * 100).toFixed(2) + '%',
-                    count: this.success,
+            service: {
+                status: stats.readyBots > 0 ? 'healthy' : 'initializing',
+                version: process.env.npm_package_version || 'unknown',
+                bots: {
+                    total: stats.totalBots,
+                    ready: stats.readyBots,
+                    busy: stats.busyBots,
+                    error: stats.errorBots,
+                    cooldown: stats.cooldownBots,
+                    disconnected: stats.disconnectedBots,
+                    availabilityPercentage: stats.botAvailabilityPercentage.toFixed(2) + '%',
                 },
-                cached: {
-                    rate: ((this.cached / (this.success + this.failed + this.cached + this.timeouts)) * 100).toFixed(2) + '%',
-                    count: this.cached,
+                queue: {
+                    current: this.inspects.size,
+                    max: this.MAX_QUEUE_SIZE,
                 },
-                failed: {
-                    rate: ((this.failed / (this.success + this.failed + this.cached + this.timeouts)) * 100).toFixed(2) + '%',
-                    count: this.failed,
-                },
-                timeouts: {
-                    rate: ((this.timeouts / (this.success + this.failed + this.cached + this.timeouts)) * 100).toFixed(2) + '%',
-                    count: this.timeouts,
-                },
-                retried: {
-                    count: workerStats.retriedInspections || 0,
-                    successAfterRetry: workerStats.successAfterRetry || 0,
-                },
-                total: this.success + this.failed + this.cached + this.timeouts
             },
-            requests: {
-                history: this.requests,
-                current: this.currentRequests,
-                average: this.requests.length > 0
-                    ? (this.requests.reduce((a, b) => a + b, 0) / this.requests.length).toFixed(2)
-                    : 0
+            inspections: {
+                total: metrics.success + metrics.failed + metrics.timeouts,
+                success: metrics.success,
+                cached: metrics.cached,
+                failed: metrics.failed,
+                timeouts: metrics.timeouts,
+                activeCount: stats.activeInspections,
+                successRate: metrics.success > 0
+                    ? (metrics.success / (metrics.success + metrics.failed + metrics.timeouts) * 100).toFixed(2) + '%'
+                    : '0%',
+                retries: {
+                    total: metrics.retriedInspections || 0,
+                    successfulAfterRetry: metrics.successAfterRetry || 0
+                }
             },
-            queue: {
-                current: this.inspects.size,
-                max: this.MAX_QUEUE_SIZE,
-                utilization: queueUtilization.toFixed(2) + '%',
-                avgProcessingTime: Math.round(this.getAverageProcessingTime()) + 'ms',
-                items: this.getQueueItems()
+            performance: {
+                allTime: responseTimeStats.allTime,
+                last5Minutes: responseTimeStats.recent
             },
-            activeInspections: {
-                count: workerStats.activeInspections || 0,
-                avgTime: workerStats.avgInspectionTime || 0,
-                details: workerStats.activeInspectionDetails || []
+            // Include detailed info for administrators
+            details: {
+                botStatus: metrics.botDetails || [],
+                activeInspections: metrics.activeInspectionDetails || []
             }
-        }
+        };
     }
 
     private getAverageProcessingTime(): number {
