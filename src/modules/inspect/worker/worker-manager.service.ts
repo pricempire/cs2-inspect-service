@@ -630,6 +630,10 @@ export class WorkerManagerService implements OnModuleInit {
         this.successAfterRetry++;
     }
 
+    public incrementCached() {
+        this.cached++;
+    }
+
     // Track a successful inspection with its response time
     private trackInspectionSuccess(assetId: string, duration: number) {
         this.success++;

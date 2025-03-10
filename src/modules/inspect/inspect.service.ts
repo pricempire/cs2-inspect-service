@@ -179,6 +179,7 @@ export class InspectService implements OnModuleInit {
             const cachedAsset = await this.checkCache(a, d);
             if (cachedAsset) {
                 this.cached++;
+                this.workerManagerService.incrementCached();
                 return cachedAsset;
             }
         }
