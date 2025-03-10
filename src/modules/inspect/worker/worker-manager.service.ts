@@ -58,6 +58,9 @@ export class WorkerManagerService implements OnModuleInit {
     private cached = 0;
     private timeouts = 0;
 
+    private retriedInspections = 0;
+    private successAfterRetry = 0;
+
     constructor(
         @InjectRepository(Asset)
         private assetRepository: Repository<Asset>,
@@ -420,6 +423,24 @@ export class WorkerManagerService implements OnModuleInit {
 
     public async inspectItem(s: string, a: string, d: string, m: string): Promise<any> {
         try {
+            // Create a unique request ID
+            const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+
+            // Set initial retry count
+            const retryCount = 0;
+
+            // Start the inspection with retry tracking
+            return this.executeInspection(s, a, d, m, requestId, retryCount);
+        } catch (error) {
+            this.logger.error(`Error inspecting item: ${error.message}`);
+            throw error;
+        }
+    }
+
+    private async executeInspection(s: string, a: string, d: string, m: string, requestId: string, retryCount: number): Promise<any> {
+        const MAX_RETRIES = parseInt(process.env.MAX_INSPECT_RETRIES || '3');
+
+        try {
             const worker = await this.getAvailableWorker();
             if (!worker) {
                 throw new Error('No workers with available bots');
@@ -427,14 +448,10 @@ export class WorkerManagerService implements OnModuleInit {
 
             // Use a promise to wait for the inspect result
             return new Promise<any>((resolve, reject) => {
-                // Generate a unique request ID
-                const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-
                 // Create timeout to handle inspection timeouts
                 const timeoutId = setTimeout(() => {
-                    this.inspectRequests.delete(a);
-                    this.timeouts++;
-                    reject(new Error('Inspection request timed out'));
+                    // Handle timeout with retry logic
+                    this.handleInspectionTimeout(s, a, d, m, requestId, retryCount, MAX_RETRIES, resolve, reject);
                 }, 10000);
 
                 // Store the promise handlers and inspection data
@@ -443,7 +460,7 @@ export class WorkerManagerService implements OnModuleInit {
                     reject,
                     timeoutId,
                     startTime: Date.now(),
-                    retryCount: 0,
+                    retryCount,
                     inspectUrl: { s, a, d, m },
                     ms: m !== '0' && m ? m : s,
                     requestId
@@ -457,8 +474,57 @@ export class WorkerManagerService implements OnModuleInit {
                 });
             });
         } catch (error) {
-            this.logger.error(`Error inspecting item: ${error.message}`);
+            this.logger.error(`Error during inspection attempt ${retryCount + 1}: ${error.message}`);
+
+            // If we still have retries left and this is a timeout/availability error, try again
+            if (retryCount < MAX_RETRIES &&
+                (error.message.includes('timed out') || error.message.includes('No workers with available bots'))) {
+                this.logger.warn(`Retrying inspection for asset ${a} (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+
+                // Wait a moment before retrying
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Retry with incremented retry count
+                return this.executeInspection(s, a, d, m, requestId, retryCount + 1);
+            }
+
+            // Otherwise, give up
             throw error;
+        }
+    }
+
+    private handleInspectionTimeout(
+        s: string, a: string, d: string, m: string,
+        requestId: string, retryCount: number, maxRetries: number,
+        resolve: (value: any) => void,
+        reject: (reason?: any) => void
+    ): void {
+        // Clean up the current request
+        this.inspectRequests.delete(a);
+
+        // Check if we can retry
+        if (retryCount < maxRetries) {
+            // Increment retry count
+            const nextRetryCount = retryCount + 1;
+
+            // Track the retry
+            this.incrementRetriedInspections();
+
+            this.logger.warn(`Inspection timeout for asset ${a}. Retrying with a different bot (attempt ${nextRetryCount}/${maxRetries})`);
+
+            // Try again with a different bot
+            this.executeInspection(s, a, d, m, requestId, nextRetryCount)
+                .then(result => {
+                    // Track successful retry
+                    this.incrementSuccessAfterRetry();
+                    resolve(result);
+                })
+                .catch(reject);
+        } else {
+            // We've used all our retries
+            this.logger.error(`Inspection failed after ${maxRetries} retry attempts for asset ${a}`);
+            this.timeouts++;
+            reject(new Error(`Inspection timed out after ${maxRetries} retry attempts`));
         }
     }
 
@@ -518,7 +584,17 @@ export class WorkerManagerService implements OnModuleInit {
             botDetails,
             activeInspections,
             avgInspectionTime: Math.round(avgInspectionTime),
-            activeInspectionDetails: activeInspectionDetails.slice(0, 10) // Limit to 10 for UI display
+            activeInspectionDetails: activeInspectionDetails.slice(0, 10), // Limit to 10 for UI display
+            retriedInspections: this.retriedInspections,
+            successAfterRetry: this.successAfterRetry
         };
+    }
+
+    private incrementRetriedInspections() {
+        this.retriedInspections++;
+    }
+
+    private incrementSuccessAfterRetry() {
+        this.successAfterRetry++;
     }
 } 

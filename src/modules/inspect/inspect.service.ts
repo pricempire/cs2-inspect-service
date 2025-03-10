@@ -126,6 +126,10 @@ export class InspectService implements OnModuleInit {
                     rate: ((this.timeouts / (this.success + this.failed + this.cached + this.timeouts)) * 100).toFixed(2) + '%',
                     count: this.timeouts,
                 },
+                retried: {
+                    count: workerStats.retriedInspections || 0,
+                    successAfterRetry: workerStats.successAfterRetry || 0,
+                },
                 total: this.success + this.failed + this.cached + this.timeouts
             },
             requests: {

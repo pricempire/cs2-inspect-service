@@ -12,6 +12,7 @@ export BOTS_PER_WORKER=50
 export MAX_CONCURRENT_INIT=10
 export WORKER_TIMEOUT=60000
 export STATS_UPDATE_INTERVAL=3000
+export MAX_INSPECT_RETRIES=3
 
 # Specify accounts file location
 export ACCOUNTS_FILE=${ACCOUNTS_FILE:-"accounts.txt"}
