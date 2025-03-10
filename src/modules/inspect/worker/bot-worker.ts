@@ -88,6 +88,7 @@ class BotWorker {
                         sessionPath,
                         blacklistPath: process.env.BLACKLIST_PATH || './blacklist.txt',
                         inspectTimeout: 1000,
+                        cooldownTime: parseInt(process.env.BOT_COOLDOWN_TIME || '30000'),
                     });
 
                     // Forward bot events to parent process

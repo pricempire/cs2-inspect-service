@@ -357,11 +357,20 @@ export class Bot extends EventEmitter {
     }
 
     private handleInspectTimeout(): void {
+        // Track that we're going into cooldown
+        this.cooldownCount++;
+        this.errorCount++;
+        this.incrementFailureCount();
+
+        // Set status to cooldown
         this.status = BotStatus.COOLDOWN
+        this.log(`Bot ${this.config.username} going into cooldown for ${this.config.cooldownTime / 1000}s due to inspection timeout. Total cooldowns: ${this.cooldownCount}`, true)
         this.clearInspectTimeout()
 
+        // Set a timer to return to READY status after cooldown period
         this.cooldownTimeout = setTimeout(() => {
             this.status = BotStatus.READY
+            this.log(`Bot ${this.config.username} returned to READY status after cooldown period`)
         }, this.config.cooldownTime)
     }
 
