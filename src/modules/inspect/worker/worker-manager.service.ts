@@ -7,6 +7,34 @@ import { Bot } from '../bot.class';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createHash } from 'crypto';
+import { Worker } from 'worker_threads';
+import { spawnWorker } from './spawn-worker';
+
+interface WorkerInfo {
+    id: number;
+    worker: Worker;
+    stats: {
+        readyBots: number;
+        busyBots: number;
+        cooldownBots: number;
+        errorBots: number;
+        disconnectedBots: number;
+        totalBots: number;
+        botDetails: any[];
+    };
+    status: 'initializing' | 'ready' | 'error';
+}
+
+interface InspectRequest {
+    resolve: (value: any) => void;
+    reject: (reason?: any) => void;
+    timeoutId: NodeJS.Timeout;
+    startTime?: number;
+    retryCount?: number;
+    inspectUrl?: { s: string, a: string, d: string, m: string };
+    ms?: string;
+    requestId: string;
+}
 
 @Injectable()
 export class WorkerManagerService implements OnModuleInit {
@@ -17,20 +45,14 @@ export class WorkerManagerService implements OnModuleInit {
     private readonly THROTTLE_COOLDOWN = 30 * 60 * 1000; // 30 minutes
     private readonly MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3');
     private readonly MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_INIT || '10');
-    private nextBot = 0;
+    private readonly BOTS_PER_WORKER = parseInt(process.env.BOTS_PER_WORKER || '50');
+    private readonly WORKER_TIMEOUT = parseInt(process.env.WORKER_TIMEOUT || '60000'); // 1 minute
 
-    // Add a map to store pending inspection requests
-    private inspectRequests: Map<string, {
-        resolve: (value: any) => void;
-        reject: (reason?: any) => void;
-        timeoutId: NodeJS.Timeout;
-        startTime?: number;
-        retryCount?: number;
-        inspectUrl?: { s: string, a: string, d: string, m: string };
-        ms?: string;
-    }> = new Map();
+    private workers: WorkerInfo[] = [];
+    private nextWorkerId = 0;
 
-    // Track stats like the original service
+    private inspectRequests: Map<string, InspectRequest> = new Map();
+
     private success = 0;
     private failed = 0;
     private cached = 0;
@@ -44,210 +66,311 @@ export class WorkerManagerService implements OnModuleInit {
     ) { }
 
     async onModuleInit() {
-        this.logger.log('Initializing Worker Manager Service...');
+        if (process.env.WORKER_ENABLED !== 'true') {
+            this.logger.warn('Worker initialization is disabled. Set WORKER_ENABLED=true to enable.');
+            return;
+        }
 
-        try {
-            // Load accounts
-            await this.loadAccounts();
+        await this.loadAccounts();
 
-            // Initialize bots
-            await this.initializeBots();
-        } catch (error) {
-            this.logger.error(`Error in worker manager initialization: ${error.message}`);
+        if (this.accounts.length > 0) {
+            await this.createWorkers();
+        } else {
+            this.logger.warn('No accounts loaded, workers will not be created');
         }
     }
 
     private async loadAccounts(): Promise<void> {
+        const accountsFile = process.env.ACCOUNTS_FILE || 'accounts.txt';
+        this.logger.debug(`Loading accounts from ${accountsFile}`);
+
         try {
-            const accountsFile = process.env.ACCOUNTS_FILE || 'accounts.txt';
-            if (!fs.existsSync(accountsFile)) {
-                this.logger.warn(`Accounts file not found at ${accountsFile}`);
+            // Try loading from the specified file
+            if (fs.existsSync(accountsFile)) {
+                const content = fs.readFileSync(accountsFile, 'utf8');
+                this.processAccountFile(content);
                 return;
             }
 
-            const accountsData = fs.readFileSync(accountsFile, 'utf8');
-            this.accounts = accountsData.split('\n')
-                .map(line => line.trim())
-                .filter(line => line && !line.startsWith('#'));
+            // Try alternative locations
+            const fallbackLocations = [
+                'accounts.txt',
+                '../accounts.txt',
+                '/app/accounts.txt'
+            ];
 
-            this.logger.log(`Loaded ${this.accounts.length} accounts from ${accountsFile}`);
+            for (const location of fallbackLocations) {
+                if (fs.existsSync(location)) {
+                    const content = fs.readFileSync(location, 'utf8');
+                    this.processAccountFile(content);
+                    this.logger.debug(`Loaded accounts from fallback location: ${location}`);
+                    return;
+                }
+            }
+
+            throw new Error(`Accounts file not found at ${accountsFile} or fallback locations`);
         } catch (error) {
             this.logger.error(`Failed to load accounts: ${error.message}`);
         }
     }
 
-    private async initializeBots(): Promise<void> {
+    private processAccountFile(content: string): void {
+        this.accounts = content.split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('#'));
 
-        this.logger.log('Initializing bots...');
-        const activeInitializations = new Set<string>();
-        const botPromises: Promise<void>[] = [];
+        // Randomize accounts for better distribution
+        this.accounts = this.accounts.sort(() => Math.random() - 0.5);
 
-        for (const account of this.accounts) {
-            const [username, password] = account.split(':');
+        this.logger.log(`Loaded ${this.accounts.length} accounts`);
+    }
 
-            // Check if account is throttled
-            const throttleExpiry = this.throttledAccounts.get(username);
-            if (throttleExpiry && Date.now() < throttleExpiry) {
-                this.logger.warn(`Account ${username} is throttled. Skipping initialization.`);
-                continue;
-            }
+    private async createWorkers(): Promise<void> {
+        const numWorkers = Math.ceil(this.accounts.length / this.BOTS_PER_WORKER);
+        this.logger.log(`Creating ${numWorkers} workers for ${this.accounts.length} accounts (${this.BOTS_PER_WORKER} bots per worker)`);
 
-            // Wait if we've reached the concurrent initialization limit
-            while (activeInitializations.size >= this.MAX_CONCURRENT) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+        for (let i = 0; i < numWorkers; i++) {
+            const workerAccounts = this.accounts.slice(
+                i * this.BOTS_PER_WORKER,
+                (i + 1) * this.BOTS_PER_WORKER
+            );
 
-            activeInitializations.add(username);
-
-            const initializeAccount = async (account: string) => {
-                const [username, password] = account.split(':');
-
-                try {
-                    const bot = new Bot({
-                        username,
-                        password,
-                        proxyUrl: process.env.PROXY_URL,
-                        debug: process.env.DEBUG === 'true',
-                        sessionPath: process.env.SESSION_PATH || './sessions',
-                        blacklistPath: process.env.BLACKLIST_PATH || './blacklist.txt',
-                        inspectTimeout: 10000,
-                    });
-
-                    // Listen for bot events
-                    bot.on('error', (error) => {
-                        this.logger.error(`Bot ${username} error: ${error}`);
-                    });
-
-                    await bot.initialize();
-                    this.bots.set(username, bot);
-                    this.logger.debug(`Bot ${username} initialized successfully`);
-
-                    // Clear throttle status if successful
-                    this.throttledAccounts.delete(username);
-                } catch (error) {
-                    if (error.message === 'ACCOUNT_DISABLED') {
-                        this.logger.error(`Account ${username} is disabled. Blacklisting...`);
-                        this.accounts = this.accounts.filter(acc => !acc.startsWith(username));
-                    } else if (error.message === 'LOGIN_THROTTLED') {
-                        this.logger.warn(`Account ${username} is throttled. Adding to cooldown.`);
-                        this.throttledAccounts.set(username, Date.now() + this.THROTTLE_COOLDOWN);
-                    } else {
-                        this.logger.error(`Failed to initialize bot ${username}: ${error.message}`);
-                    }
-                } finally {
-                    activeInitializations.delete(username);
-                }
-            };
-
-            botPromises.push(initializeAccount(account));
+            await this.createWorker(i, workerAccounts);
         }
 
-        await Promise.allSettled(botPromises);
-        this.logger.log(`Initialized ${this.bots.size} bots successfully`);
+        this.logger.log(`All ${numWorkers} workers created and initializing`);
     }
 
-    // Get stats to satisfy the InspectService requirements
-    public getStats() {
-        // Count the bots in each status
-        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
-        const busyBots = Array.from(this.bots.values()).filter(bot => bot.isBusy()).length;
-        const cooldownBots = Array.from(this.bots.values()).filter(bot => bot.isCooldown()).length;
-        const errorBots = Array.from(this.bots.values()).filter(bot => bot.isError()).length;
-        const disconnectedBots = Array.from(this.bots.values()).filter(bot => bot.isDisconnected()).length;
-        const totalBots = this.bots.size;
+    private async createWorker(workerId: number, accounts: string[]): Promise<void> {
+        try {
+            const workerPath = path.join('bot-worker.js');
 
-        const botDetails = Array.from(this.bots.entries()).map(([username, bot]) => {
-            return {
-                username: username.substring(0, 10), // Truncate to 10 characters
-                status: bot.isReady() ? 'ready' :
-                    bot.isBusy() ? 'busy' :
-                        bot.isCooldown() ? 'cooldown' :
-                            bot.isDisconnected() ? 'disconnected' :
-                                bot.isError() ? 'error' : 'initializing',
-                inspectCount: bot.getInspectCount() || 0,
-                successCount: bot.getSuccessCount() || 0,
-                failureCount: bot.getFailureCount() || 0,
-                lastInspectTime: bot.getLastInspectTime() || null,
-                errorCount: bot.getErrorCount() || 0,
-                avgResponseTime: bot.getAverageResponseTime() || 0,
-                uptime: bot.getUptime() || 0,
-            };
+            // Create a new worker thread using our helper
+            const worker = spawnWorker(workerPath, {
+                workerId,
+                accounts
+            }, {
+                // Pass environment variables to the worker
+                env: process.env
+            });
+
+            // Store worker info
+            this.workers.push({
+                id: workerId,
+                worker,
+                stats: {
+                    readyBots: 0,
+                    busyBots: 0,
+                    cooldownBots: 0,
+                    errorBots: 0,
+                    disconnectedBots: 0,
+                    totalBots: 0,
+                    botDetails: []
+                },
+                status: 'initializing'
+            });
+
+            // Set up event handlers
+            this.setupWorkerCommunication(worker, workerId);
+
+            this.logger.debug(`Worker ${workerId} created with ${accounts.length} accounts`);
+        } catch (error) {
+            this.logger.error(`Failed to create worker ${workerId}: ${error.message}`);
+        }
+    }
+
+    private setupWorkerCommunication(worker: Worker, workerId: number): void {
+        worker.on('message', (message: any) => {
+            switch (message.type) {
+                case 'botInitialized':
+                    this.handleBotInitialized(message);
+                    break;
+                case 'inspectResult':
+                    this.handleInspectResult(message);
+                    break;
+                case 'inspectError':
+                    this.handleInspectError(message);
+                    break;
+                case 'stats':
+                    this.updateWorkerStats(workerId, message.stats);
+                    break;
+                case 'shutdown':
+                    this.logger.log(`Worker ${workerId} shut down successfully`);
+                    this.removeWorker(workerId);
+                    break;
+                default:
+                    this.logger.warn(`Unknown message from worker ${workerId}: ${message.type}`);
+            }
         });
 
-        return {
-            readyBots,
-            busyBots,
-            cooldownBots,
-            errorBots,
-            disconnectedBots,
-            totalBots,
-            botDetails,
-            // For compatibility with existing code
-            workers: 1,
-            workerDetails: [
-                {
-                    id: 1,
-                    status: 'ready',
-                    bots: totalBots,
-                    ready: readyBots,
-                    busy: busyBots,
-                    cooldown: cooldownBots,
-                    error: errorBots,
-                    disconnected: disconnectedBots
-                }
-            ]
-        };
+        worker.on('error', (error) => {
+            this.logger.error(`Worker ${workerId} error: ${error.message}`);
+            this.updateWorkerStatus(workerId, 'error');
+        });
+
+        worker.on('exit', (code) => {
+            if (code !== 0) {
+                this.logger.error(`Worker ${workerId} exited with code ${code}`);
+            } else {
+                this.logger.log(`Worker ${workerId} exited cleanly`);
+            }
+            this.removeWorker(workerId);
+        });
     }
 
-    // Get bot availability percentage
+    private handleBotInitialized(message: any): void {
+        const { workerId, username, status } = message;
+        this.logger.debug(`Bot ${username} initialized in worker ${workerId} with status ${status}`);
+
+        // Update worker status if there's at least one ready bot
+        if (status === 'ready') {
+            const workerInfo = this.workers.find(w => w.id === workerId);
+            if (workerInfo) {
+                // Mark the worker as ready since it has at least one ready bot
+                workerInfo.status = 'ready';
+
+                // Request fresh stats after bot initialization
+                workerInfo.worker.postMessage({ type: 'getStats' });
+
+                this.logger.debug(`Worker ${workerId} marked as ready with at least one ready bot`);
+            }
+        }
+    }
+
+    private handleInspectResult(message: any): void {
+        const { workerId, assetId, result } = message;
+
+        const request = this.inspectRequests.get(assetId);
+        if (!request) {
+            this.logger.warn(`Received inspect result for unknown request: ${assetId}`);
+            return;
+        }
+
+        try {
+            clearTimeout(request.timeoutId);
+            this.success++;
+            request.resolve(result);
+        } catch (error) {
+            this.logger.error(`Error handling inspect result: ${error.message}`);
+            request.reject(error);
+        } finally {
+            this.inspectRequests.delete(assetId);
+        }
+    }
+
+    private handleInspectError(message: any): void {
+        const { requestId, assetId, error } = message;
+
+        const request = this.inspectRequests.get(assetId);
+        if (!request) {
+            this.logger.warn(`Received inspect error for unknown request: ${assetId}`);
+            return;
+        }
+
+        clearTimeout(request.timeoutId);
+        this.failed++;
+        request.reject(new Error(error));
+        this.inspectRequests.delete(assetId);
+    }
+
+    private updateWorkerStats(workerId: number, stats: any): void {
+        const workerInfo = this.workers.find(w => w.id === workerId);
+        if (workerInfo) {
+            // Update stats
+            workerInfo.stats = stats;
+
+            // Update worker status based on available bots
+            if (stats.readyBots > 0 && workerInfo.status !== 'ready') {
+                this.updateWorkerStatus(workerId, 'ready');
+                this.logger.debug(`Worker ${workerId} marked ready with ${stats.readyBots} ready bots`);
+            } else if (stats.readyBots === 0 && workerInfo.status === 'ready') {
+                // Still mark as ready but log a warning
+                this.logger.warn(`Worker ${workerId} has no ready bots but status is ready`);
+            }
+
+            // Log stats periodically (to reduce log spam, only log when ready bots change)
+            if (stats.readyBots > 0) {
+                this.logger.debug(`Worker ${workerId} stats: ready=${stats.readyBots}, busy=${stats.busyBots}, total=${stats.totalBots}`);
+            }
+        }
+    }
+
+    private updateWorkerStatus(workerId: number, status: 'initializing' | 'ready' | 'error'): void {
+        const workerInfo = this.workers.find(w => w.id === workerId);
+        if (workerInfo) {
+            workerInfo.status = status;
+        }
+    }
+
+    private removeWorker(workerId: number): void {
+        this.workers = this.workers.filter(w => w.id !== workerId);
+    }
+
     public getBotAvailabilityPercentage(): number {
-        const totalBots = this.bots.size;
+        const totalBots = this.getTotalBots();
         if (totalBots === 0) return 0;
 
-        const readyBots = Array.from(this.bots.values()).filter(bot => bot.isReady()).length;
+        const readyBots = this.getReadyBots();
         return (readyBots / totalBots) * 100;
     }
 
-    // Get an available bot for inspections
-    private async getAvailableBot(): Promise<Bot | null> {
-        const readyBots = Array.from(this.bots.entries())
-            .filter(([_, bot]) => bot.isReady());
+    private getTotalBots(): number {
+        return this.workers.reduce((sum, worker) => sum + worker.stats.totalBots, 0);
+    }
 
-        if (readyBots.length === 0) {
+    private getReadyBots(): number {
+        return this.workers.reduce((sum, worker) => sum + worker.stats.readyBots, 0);
+    }
+
+    private async getAvailableWorker(): Promise<WorkerInfo | null> {
+        // Filter workers that are ready and have available bots
+        const availableWorkers = this.workers.filter(w =>
+            w.status === 'ready' && w.stats.readyBots > 0
+        );
+
+        if (availableWorkers.length === 0) {
+            // Log detailed information about all workers for debugging
+            this.logger.warn(`No available workers found. Worker states:`);
+            this.workers.forEach(w => {
+                this.logger.warn(`Worker ${w.id}: status=${w.status}, readyBots=${w.stats.readyBots}, totalBots=${w.stats.totalBots}`);
+            });
+
+            // Refresh stats from all workers
+            this.workers.forEach(w => {
+                if (w.worker) {
+                    try {
+                        w.worker.postMessage({ type: 'getStats' });
+                    } catch (e) {
+                        this.logger.error(`Error requesting stats from worker ${w.id}: ${e.message}`);
+                    }
+                }
+            });
+
             return null;
         }
 
-        // Get the next available bot using the total number of bots
-        const startIndex = this.nextBot;
-        let attempts = 0;
+        // Simple round-robin selection
+        const workerIndex = this.nextWorkerId % availableWorkers.length;
+        this.nextWorkerId = (this.nextWorkerId + 1) % Math.max(1, availableWorkers.length);
 
-        // Try finding an available bot, starting from the next position
-        while (attempts < this.bots.size) {
-            const currentIndex = (startIndex + attempts) % this.bots.size;
-            const bot = Array.from(this.bots.values())[currentIndex];
+        const selectedWorker = availableWorkers[workerIndex];
+        this.logger.debug(`Selected worker ${selectedWorker.id} with ${selectedWorker.stats.readyBots} ready bots`);
 
-            if (bot && bot.isReady()) {
-                this.nextBot = (currentIndex + 1) % this.bots.size;
-                return bot;
-            }
-
-            attempts++;
-        }
-
-        // If we get here, return the first available bot
-        return readyBots[0][1]; // Extract the Bot from the [string, Bot] tuple
+        return selectedWorker;
     }
 
-    // Update the inspectItem method to use the inspect requests map
     public async inspectItem(s: string, a: string, d: string, m: string): Promise<any> {
         try {
-            const bot = await this.getAvailableBot();
-            if (!bot) {
-                throw new Error('No bots are ready');
+            const worker = await this.getAvailableWorker();
+            if (!worker) {
+                throw new Error('No workers with available bots');
             }
 
             // Use a promise to wait for the inspect result
             return new Promise<any>((resolve, reject) => {
+                // Generate a unique request ID
+                const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+
                 // Create timeout to handle inspection timeouts
                 const timeoutId = setTimeout(() => {
                     this.inspectRequests.delete(a);
@@ -263,48 +386,57 @@ export class WorkerManagerService implements OnModuleInit {
                     startTime: Date.now(),
                     retryCount: 0,
                     inspectUrl: { s, a, d, m },
-                    ms: m !== '0' && m ? m : s
+                    ms: m !== '0' && m ? m : s,
+                    requestId
                 });
 
-                // Listen for the inspectResult event from the bot
-                const handleInspectResult = (result: any) => {
-                    if (result.itemid?.toString() === a) {
-                        // Remove the listener to avoid memory leaks
-                        bot.removeListener('inspectResult', handleInspectResult);
-
-                        try {
-                            // Process the inspect result (just log success and cleanup)
-                            bot.incrementSuccessCount();
-                            bot.incrementInspectCount();
-                            this.success++;
-
-                            // Return the raw result to InspectService to handle DB operations
-                            resolve(result);
-                        } catch (error) {
-                            this.logger.error(`Error handling inspect result: ${error.message}`);
-                            reject(error);
-                        } finally {
-                            clearTimeout(timeoutId);
-                            this.inspectRequests.delete(a);
-                        }
-                    }
-                };
-
-                // Add the event listener
-                bot.on('inspectResult', handleInspectResult);
-
-                // Send the inspection request to the bot
-                bot.inspectItem(m !== '0' && m ? m : s, a, d).catch(error => {
-                    bot.removeListener('inspectResult', handleInspectResult);
-                    clearTimeout(timeoutId);
-                    this.inspectRequests.delete(a);
-                    this.failed++;
-                    reject(error);
+                // Send the inspect request to the worker
+                worker.worker.postMessage({
+                    type: 'inspectItem',
+                    s, a, d, m,
+                    requestId
                 });
             });
         } catch (error) {
             this.logger.error(`Error inspecting item: ${error.message}`);
             throw error;
         }
+    }
+
+    public getStats() {
+        // Aggregate stats from all workers
+        const readyBots = this.workers.reduce((sum, w) => sum + w.stats.readyBots, 0);
+        const busyBots = this.workers.reduce((sum, w) => sum + w.stats.busyBots, 0);
+        const cooldownBots = this.workers.reduce((sum, w) => sum + w.stats.cooldownBots, 0);
+        const errorBots = this.workers.reduce((sum, w) => sum + w.stats.errorBots, 0);
+        const disconnectedBots = this.workers.reduce((sum, w) => sum + w.stats.disconnectedBots, 0);
+        const totalBots = this.workers.reduce((sum, w) => sum + w.stats.totalBots, 0);
+
+        // Compile detailed stats about each worker
+        const workerDetails = this.workers.map(worker => ({
+            id: worker.id,
+            status: worker.status,
+            bots: worker.stats.totalBots,
+            ready: worker.stats.readyBots,
+            busy: worker.stats.busyBots,
+            cooldown: worker.stats.cooldownBots,
+            error: worker.stats.errorBots,
+            disconnected: worker.stats.disconnectedBots
+        }));
+
+        // Flatten all bot details from all workers
+        const botDetails = this.workers.flatMap(w => w.stats.botDetails || []);
+
+        return {
+            readyBots,
+            busyBots,
+            cooldownBots,
+            errorBots,
+            disconnectedBots,
+            totalBots,
+            workers: this.workers.length,
+            workerDetails,
+            botDetails
+        };
     }
 } 

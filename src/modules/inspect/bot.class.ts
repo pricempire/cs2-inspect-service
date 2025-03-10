@@ -107,7 +107,12 @@ export class Bot extends EventEmitter {
     }
 
     public isReady(): boolean {
-        return this.status === BotStatus.READY
+        const ready = this.status === BotStatus.READY;
+        // Enhanced logging for debugging
+        if (process.env.BOT_DEBUG === 'true') {
+            this.log(`Bot ${this.config.username} status check: ${this.status}, isReady=${ready}`);
+        }
+        return ready;
     }
 
     public async initialize(): Promise<void> {

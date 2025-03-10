@@ -42,10 +42,12 @@ ENV UV_THREADPOOL_SIZE=64
 
 # Bot worker configuration 
 ENV BOTS_PER_WORKER=50
-ENV MAX_WORKERS=16
-ENV WORKER_MEMORY_LIMIT=512
+ENV MAX_CONCURRENT_INIT=10
+ENV WORKER_TIMEOUT=60000
+ENV WORKER_ENABLED=true
+ENV BOT_DEBUG=false
 
-# Enable threading optimizations
+# Performance tuning
 ENV NODE_WORKER_THREADS=1
 
 # Add this variable to enable graceful startup

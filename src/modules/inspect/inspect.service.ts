@@ -69,8 +69,17 @@ export class InspectService implements OnModuleInit {
 
     async onModuleInit() {
         this.logger.debug('Starting Inspect Module...');
-        // Worker manager service will handle bot initialization
-        this.logger.log('Inspect Module initialized. Bot initialization handled by Worker Manager Service.');
+
+        if (process.env.WORKER_ENABLED === 'true') {
+            this.logger.log('Worker mode enabled. Bot initialization handled by Worker Manager Service.');
+            this.logger.log('Each worker thread will handle up to 50 bots for optimal performance.');
+        } else {
+            this.logger.warn('Worker mode is disabled. To enable multi-threading, set WORKER_ENABLED=true');
+            this.logger.warn('Reverting to single-threaded legacy mode.');
+
+            // Let's still use the worker manager's accounts
+            await this.workerManagerService.onModuleInit();
+        }
     }
 
     // Use worker manager for bot stats
