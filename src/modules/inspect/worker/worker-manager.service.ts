@@ -295,16 +295,40 @@ export class WorkerManagerService implements OnModuleInit {
     private handleBotStatusChange(message: any): void {
         const { workerId, username, status, assetId } = message;
 
-        // Update the worker's bot status tracking
+        // Request updated stats immediately to ensure accurate status tracking
         const workerInfo = this.workers.find(w => w.id === workerId);
         if (workerInfo) {
-            // Request updated stats to reflect the change
             try {
+                // Request stats update immediately to reflect the most recent status changes
                 workerInfo.worker.postMessage({ type: 'getStats' });
+
+                // Update the stats for this worker directly to improve responsiveness
+                if (status === 'busy') {
+                    // Increment busy count, decrement ready count
+                    if (workerInfo.stats.readyBots > 0) workerInfo.stats.readyBots--;
+                    workerInfo.stats.busyBots++;
+                } else if (status === 'ready') {
+                    // Increment ready count, decrement busy count
+                    workerInfo.stats.readyBots++;
+                    workerInfo.stats.busyBots--;
+                } else if (status === 'cooldown') {
+                    // Handle cooldown status
+                    workerInfo.stats.cooldownBots++;
+                    if (workerInfo.stats.busyBots > 0) workerInfo.stats.busyBots--;
+                } else if (status === 'error') {
+                    // Handle error status
+                    workerInfo.stats.errorBots++;
+                    if (workerInfo.stats.busyBots > 0) workerInfo.stats.busyBots--;
+                } else if (status === 'disconnected') {
+                    // Handle disconnected status
+                    workerInfo.stats.disconnectedBots++;
+                    if (workerInfo.stats.busyBots > 0) workerInfo.stats.busyBots--;
+                }
 
                 // Log for debugging
                 const actionType = status === 'busy' ? 'started' : 'completed';
                 this.logger.debug(`Bot ${username} in worker ${workerId} ${actionType} inspection for asset ${assetId}`);
+                this.logger.debug(`Updated worker stats: ready=${workerInfo.stats.readyBots}, busy=${workerInfo.stats.busyBots}, cooldown=${workerInfo.stats.cooldownBots}, error=${workerInfo.stats.errorBots}, disconnected=${workerInfo.stats.disconnectedBots}`);
             } catch (error) {
                 this.logger.error(`Error updating stats after bot status change: ${error.message}`);
             }
@@ -350,24 +374,46 @@ export class WorkerManagerService implements OnModuleInit {
     private updateWorkerStats(workerId: number, stats: any): void {
         const workerInfo = this.workers.find(w => w.id === workerId);
         if (workerInfo) {
+            // Store previous stats for comparison
+            const prevStats = { ...workerInfo.stats };
+
             // Update stats
             workerInfo.stats = stats;
+
+            // Log significant changes in bot counts
+            if (prevStats.readyBots !== stats.readyBots ||
+                prevStats.busyBots !== stats.busyBots ||
+                prevStats.errorBots !== stats.errorBots ||
+                prevStats.cooldownBots !== stats.cooldownBots ||
+                prevStats.disconnectedBots !== stats.disconnectedBots) {
+
+                this.logger.debug(`Worker ${workerId} stats changed: ready=${prevStats.readyBots}->${stats.readyBots}, ` +
+                    `busy=${prevStats.busyBots}->${stats.busyBots}, ` +
+                    `error=${prevStats.errorBots}->${stats.errorBots}, ` +
+                    `cooldown=${prevStats.cooldownBots}->${stats.cooldownBots}, ` +
+                    `disconnected=${prevStats.disconnectedBots}->${stats.disconnectedBots}`);
+            }
 
             // Update worker status based on available bots
             if (stats.readyBots > 0 && workerInfo.status !== 'ready') {
                 this.updateWorkerStatus(workerId, 'ready');
                 this.logger.debug(`Worker ${workerId} marked ready with ${stats.readyBots} ready bots`);
-            } else if (stats.readyBots === 0 && workerInfo.status === 'ready') {
+            } else if (stats.readyBots === 0 && stats.totalBots > 0 && workerInfo.status === 'ready') {
                 // Still mark as ready but log a warning
                 this.logger.warn(`Worker ${workerId} has no ready bots but status is ready`);
             }
 
-            // Log stats periodically (to reduce log spam, only log when ready bots change)
-            /*
-            if (stats.readyBots > 0) {
-                this.logger.debug(`Worker ${workerId} stats: ready=${stats.readyBots}, busy=${stats.busyBots}, total=${stats.totalBots}`);
+            // Update the bots map with the latest status information from the worker
+            if (stats.botDetails && Array.isArray(stats.botDetails)) {
+                for (const botDetail of stats.botDetails) {
+                    const bot = this.bots.get(botDetail.username);
+                    if (bot) {
+                        // We can't update the bot status directly, but we can track it in our map
+                        // This helps ensure our getStats() method returns accurate information
+                        this.logger.debug(`Bot ${botDetail.username} status from worker: ${botDetail.status}`);
+                    }
+                }
             }
-            */
         }
     }
 
@@ -383,19 +429,33 @@ export class WorkerManagerService implements OnModuleInit {
     }
 
     public getBotAvailabilityPercentage(): number {
-        const totalBots = this.getTotalBots();
-        if (totalBots === 0) return 0;
+        // Calculate bot counts from worker stats for more accurate reporting
+        let readyBots = 0;
+        let totalBots = 0;
 
-        const readyBots = this.getReadyBots();
-        return (readyBots / totalBots) * 100;
+        // Aggregate stats from all workers
+        for (const worker of this.workers) {
+            readyBots += worker.stats.readyBots || 0;
+            totalBots += worker.stats.totalBots || 0;
+        }
+
+        return totalBots > 0 ? (readyBots / totalBots) * 100 : 0;
     }
 
     private getTotalBots(): number {
-        return this.workers.reduce((sum, worker) => sum + worker.stats.totalBots, 0);
+        let totalBots = 0;
+        for (const worker of this.workers) {
+            totalBots += worker.stats.totalBots || 0;
+        }
+        return totalBots;
     }
 
     private getReadyBots(): number {
-        return this.workers.reduce((sum, worker) => sum + worker.stats.readyBots, 0);
+        let readyBots = 0;
+        for (const worker of this.workers) {
+            readyBots += worker.stats.readyBots || 0;
+        }
+        return readyBots;
     }
 
     private async getAvailableWorker(): Promise<WorkerInfo | null> {
@@ -557,13 +617,23 @@ export class WorkerManagerService implements OnModuleInit {
     }
 
     public getStats() {
-        // Count bots in each state
-        const readyBots = this.getReadyBots();
-        const totalBots = this.getTotalBots();
-        const busyBots = Array.from(this.bots.values()).filter(bot => bot.currentStatus === BotStatus.BUSY).length;
-        const errorBots = Array.from(this.bots.values()).filter(bot => bot.currentStatus === BotStatus.ERROR).length;
-        const cooldownBots = Array.from(this.bots.values()).filter(bot => bot.currentStatus === BotStatus.COOLDOWN).length;
-        const disconnectedBots = Array.from(this.bots.values()).filter(bot => bot.currentStatus === BotStatus.DISCONNECTED).length;
+        // Calculate bot counts from worker stats for more accurate reporting
+        let readyBots = 0;
+        let busyBots = 0;
+        let errorBots = 0;
+        let cooldownBots = 0;
+        let disconnectedBots = 0;
+        let totalBots = 0;
+
+        // Aggregate stats from all workers
+        for (const worker of this.workers) {
+            readyBots += worker.stats.readyBots || 0;
+            busyBots += worker.stats.busyBots || 0;
+            errorBots += worker.stats.errorBots || 0;
+            cooldownBots += worker.stats.cooldownBots || 0;
+            disconnectedBots += worker.stats.disconnectedBots || 0;
+            totalBots += worker.stats.totalBots || 0;
+        }
 
         // Active inspections
         const activeInspections = this.inspectRequests.size;
@@ -579,18 +649,15 @@ export class WorkerManagerService implements OnModuleInit {
         });
 
         // Calculate bot availability
-        const botAvailabilityPercentage = this.getBotAvailabilityPercentage();
+        const botAvailabilityPercentage = totalBots > 0 ? (readyBots / totalBots) * 100 : 0;
 
-        // Bot details for admin view
-        const botDetails = Array.from(this.bots.entries()).map(([username, bot]) => {
-            return {
-                username,
-                state: bot.currentStatus,
-                lastUsed: new Date().getTime(), // Default to current time
-                successfulInspections: 0,
-                failedInspections: 0
-            };
-        });
+        // Collect bot details from all workers
+        const botDetails = [];
+        for (const worker of this.workers) {
+            if (worker.stats.botDetails && Array.isArray(worker.stats.botDetails)) {
+                botDetails.push(...worker.stats.botDetails);
+            }
+        }
 
         return {
             readyBots,

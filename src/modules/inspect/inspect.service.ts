@@ -82,10 +82,7 @@ export class InspectService implements OnModuleInit {
 
         // Return a clean, well-organized stats structure
         return {
-            uptime: {
-                total_ms: uptime,
-                formatted: `${days}d ${hours}h ${minutes}m ${seconds}s`,
-            },
+            uptime: `${days}d ${hours}h ${minutes}m ${seconds}s`,
             service: {
                 status: stats.readyBots > 0 ? 'healthy' : 'initializing',
                 version: process.env.npm_package_version || 'unknown',
