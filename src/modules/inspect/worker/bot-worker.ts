@@ -23,6 +23,9 @@ class BotWorker {
 
         this.setupCommunication();
         this.initializeBots();
+
+        // Set up periodic stats reporting
+        this.setupPeriodicStatsReporting();
     }
 
     private setupCommunication() {
@@ -135,6 +138,14 @@ class BotWorker {
         this.sendStats();
     }
 
+    private setupPeriodicStatsReporting() {
+        // Send stats every 3 seconds to balance between real-time updates and overhead
+        const STATS_UPDATE_INTERVAL = parseInt(process.env.STATS_UPDATE_INTERVAL || '3000');
+        setInterval(() => {
+            this.sendStats();
+        }, STATS_UPDATE_INTERVAL);
+    }
+
     private async handleInspectRequest(message: any) {
         const { s, a, d, m, requestId } = message;
 
@@ -149,6 +160,18 @@ class BotWorker {
                 });
                 return;
             }
+
+            // Notify parent that a bot is now busy (real-time status update)
+            this.sendToParent({
+                type: 'botStatusChange',
+                workerId: this.workerId,
+                username: this.getBotUsername(bot),
+                status: 'busy',
+                assetId: a
+            });
+
+            // Send updated stats immediately after status change
+            this.sendStats();
 
             await bot.inspectItem(m !== '0' && m ? m : s, a, d);
         } catch (error) {
@@ -169,6 +192,15 @@ class BotWorker {
         bot.incrementSuccessCount();
         bot.incrementInspectCount();
 
+        // Notify parent that bot is now ready again (real-time status update)
+        this.sendToParent({
+            type: 'botStatusChange',
+            workerId: this.workerId,
+            username,
+            status: 'ready',
+            assetId: response.itemid?.toString()
+        });
+
         // Send result back to parent
         this.sendToParent({
             type: 'inspectResult',
@@ -176,6 +208,19 @@ class BotWorker {
             assetId: response.itemid?.toString(),
             result: response
         });
+
+        // Send updated stats immediately after status change
+        this.sendStats();
+    }
+
+    private getBotUsername(bot: Bot): string {
+        // Find the username for a bot instance
+        for (const [username, botInstance] of this.bots.entries()) {
+            if (botInstance === bot) {
+                return username;
+            }
+        }
+        return 'unknown';
     }
 
     private async getAvailableBot(): Promise<Bot | null> {

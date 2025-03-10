@@ -141,6 +141,11 @@ export class InspectService implements OnModuleInit {
                 utilization: queueUtilization.toFixed(2) + '%',
                 avgProcessingTime: Math.round(this.getAverageProcessingTime()) + 'ms',
                 items: this.getQueueItems()
+            },
+            activeInspections: {
+                count: workerStats.activeInspections || 0,
+                avgTime: workerStats.avgInspectionTime || 0,
+                details: workerStats.activeInspectionDetails || []
             }
         }
     }

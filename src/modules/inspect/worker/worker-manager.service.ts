@@ -185,6 +185,9 @@ export class WorkerManagerService implements OnModuleInit {
                 case 'botInitialized':
                     this.handleBotInitialized(message);
                     break;
+                case 'botStatusChange':
+                    this.handleBotStatusChange(message);
+                    break;
                 case 'inspectResult':
                     this.handleInspectResult(message);
                     break;
@@ -233,6 +236,25 @@ export class WorkerManagerService implements OnModuleInit {
                 workerInfo.worker.postMessage({ type: 'getStats' });
 
                 this.logger.debug(`Worker ${workerId} marked as ready with at least one ready bot`);
+            }
+        }
+    }
+
+    private handleBotStatusChange(message: any): void {
+        const { workerId, username, status, assetId } = message;
+
+        // Update the worker's bot status tracking
+        const workerInfo = this.workers.find(w => w.id === workerId);
+        if (workerInfo) {
+            // Request updated stats to reflect the change
+            try {
+                workerInfo.worker.postMessage({ type: 'getStats' });
+
+                // Log for debugging
+                const actionType = status === 'busy' ? 'started' : 'completed';
+                this.logger.debug(`Bot ${username} in worker ${workerId} ${actionType} inspection for asset ${assetId}`);
+            } catch (error) {
+                this.logger.error(`Error updating stats after bot status change: ${error.message}`);
             }
         }
     }
@@ -427,6 +449,26 @@ export class WorkerManagerService implements OnModuleInit {
         // Flatten all bot details from all workers
         const botDetails = this.workers.flatMap(w => w.stats.botDetails || []);
 
+        // Calculate active inspections from the inspectRequests map
+        const activeInspections = this.inspectRequests.size;
+
+        // Calculate average request time for active inspections
+        const inspectionTimes = Array.from(this.inspectRequests.values())
+            .filter(req => req.startTime)
+            .map(req => Date.now() - req.startTime!);
+
+        const avgInspectionTime = inspectionTimes.length > 0
+            ? inspectionTimes.reduce((sum, time) => sum + time, 0) / inspectionTimes.length
+            : 0;
+
+        // Get active inspection details
+        const activeInspectionDetails = Array.from(this.inspectRequests.entries())
+            .map(([assetId, req]) => ({
+                assetId,
+                elapsedMs: req.startTime ? Date.now() - req.startTime : 0,
+                startedAt: req.startTime ? new Date(req.startTime).toISOString() : null
+            }));
+
         return {
             readyBots,
             busyBots,
@@ -436,7 +478,10 @@ export class WorkerManagerService implements OnModuleInit {
             totalBots,
             workers: this.workers.length,
             workerDetails,
-            botDetails
+            botDetails,
+            activeInspections,
+            avgInspectionTime: Math.round(avgInspectionTime),
+            activeInspectionDetails: activeInspectionDetails.slice(0, 10) // Limit to 10 for UI display
         };
     }
 } 
