@@ -78,6 +78,43 @@ export class WorkerManagerService implements OnModuleInit {
         } else {
             this.logger.warn('No accounts loaded, workers will not be created');
         }
+
+        // Set up periodic cleanup of stale inspect requests
+        this.setupPeriodicCleanup();
+    }
+
+    private setupPeriodicCleanup() {
+        const CLEANUP_INTERVAL = 30000; // 30 seconds
+        const MAX_REQUEST_AGE = 60000;  // 1 minute
+
+        setInterval(() => {
+            this.cleanupStaleRequests(MAX_REQUEST_AGE);
+        }, CLEANUP_INTERVAL);
+    }
+
+    private cleanupStaleRequests(maxAge: number) {
+        const now = Date.now();
+        let cleanedCount = 0;
+
+        for (const [assetId, request] of this.inspectRequests.entries()) {
+            if (request.startTime && (now - request.startTime) > maxAge) {
+                // This request has been pending for too long
+                try {
+                    clearTimeout(request.timeoutId);
+                    request.reject(new Error('Request timed out during processing'));
+                } catch (e) {
+                    this.logger.error(`Error rejecting stale request: ${e.message}`);
+                }
+
+                this.inspectRequests.delete(assetId);
+                this.timeouts++;
+                cleanedCount++;
+            }
+        }
+
+        if (cleanedCount > 0) {
+            this.logger.warn(`Cleaned up ${cleanedCount} stale inspect requests`);
+        }
     }
 
     private async loadAccounts(): Promise<void> {

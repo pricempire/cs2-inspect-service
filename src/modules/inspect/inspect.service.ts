@@ -220,10 +220,15 @@ export class InspectService implements OnModuleInit {
 
                     try {
                         const formattedResponse = await this.handleInspectResult(response);
+                        // Remove from queue after successful processing
+                        this.queueService.remove(a);
+                        this.logger.debug(`Successfully processed and removed item ${a} from queue`);
                         resolve(formattedResponse);
                     } catch (error) {
                         this.logger.error(`Error handling inspect result: ${error.message}`);
                         this.failed++;
+                        // Ensure we remove the item from queue on error too
+                        this.queueService.remove(a);
                         reject(new HttpException('Error processing inspection result', HttpStatus.INTERNAL_SERVER_ERROR));
                     }
                 })
