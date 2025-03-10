@@ -5,17 +5,13 @@ import {
     Logger,
     OnModuleInit,
 } from '@nestjs/common'
-import * as fs from 'fs'
 import { ParseService } from './parse.service'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Asset } from 'src/entities/asset.entity'
-import { History } from 'src/entities/history.entity'
+import { History, HistoryType } from 'src/entities/history.entity'
 import { Repository } from 'typeorm'
 import { FormatService } from './format.service'
-import { HistoryType } from 'src/entities/history.entity'
-import { Cron } from '@nestjs/schedule'
 import { InspectDto } from './inspect.dto'
-import { Bot } from './bot.class'
 import { createHash } from 'crypto'
 import { QueueService } from './queue.service'
 import { WorkerManagerService } from './worker/worker-manager.service'
@@ -24,14 +20,9 @@ import { WorkerManagerService } from './worker/worker-manager.service'
 export class InspectService implements OnModuleInit {
     private readonly logger = new Logger(InspectService.name)
     private startTime: number = Date.now()
-    private readonly QUEUE_TIMEOUT = parseInt(process.env.QUEUE_TIMEOUT || '5000') // 5 seconds timeout
-    private readonly MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3')
+    private readonly QUEUE_TIMEOUT = parseInt(process.env.QUEUE_TIMEOUT || '10000') // 5 seconds timeout
     private readonly MAX_QUEUE_SIZE = parseInt(process.env.MAX_QUEUE_SIZE || '100')
-    private throttledAccounts: Map<string, number> = new Map()
-    private readonly THROTTLE_COOLDOWN = 30 * 60 * 1000 // 30 minutes in milliseconds
 
-    private bots: Map<string, Bot> = new Map()
-    private accounts: string[] = []
     private inspects: Map<string, {
         ms: string
         d: string
@@ -43,18 +34,11 @@ export class InspectService implements OnModuleInit {
         inspectUrl?: { s: string, a: string, d: string, m: string }
     }> = new Map()
 
-    private nextBot = 0
     private currentRequests = 0
-    private requests: number[] = []
     private success = 0
     private cached = 0
     private failed = 0
     private timeouts = 0
-
-    private readonly HEALTH_CHECK_THRESHOLD = 15 * 60 * 1000; // 15 minutes
-    private readonly MIN_BOT_RATIO = 0.7; // 70% minimum active bots
-    private lastHealthyTime: number = Date.now();
-    private isRecovering: boolean = false;
 
     constructor(
         private parseService: ParseService,
@@ -144,29 +128,6 @@ export class InspectService implements OnModuleInit {
                 activeInspections: metrics.activeInspectionDetails || []
             }
         };
-    }
-
-    private getAverageProcessingTime(): number {
-        const activeInspects = Array.from(this.inspects.values())
-        const processingTimes = activeInspects
-            .filter(inspect => inspect.startTime)
-            .map(inspect => Date.now() - inspect.startTime)
-        return processingTimes.length > 0
-            ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length
-            : 0
-    }
-
-    private getQueueItems() {
-        return Array.from(this.inspects.entries()).map(([assetId, inspect]) => ({
-            assetId,
-            elapsedTime: inspect.startTime ? Date.now() - inspect.startTime : 0,
-            retryCount: inspect.retryCount || 0
-        }))
-    }
-
-    private getBotAvailabilityPercentage(): number {
-        // Use worker manager to get bot availability
-        return this.workerManagerService.getBotAvailabilityPercentage();
     }
 
     public async inspectItem(query: InspectDto) {
@@ -313,7 +274,6 @@ export class InspectService implements OnModuleInit {
     }
 
     private async saveHistory(response: any, history: any, inspectData: any, uniqueId: string) {
-        /*
         const existing = await this.historyRepository.findOne({
             where: {
                 assetId: parseInt(response.itemid),
@@ -335,8 +295,109 @@ export class InspectService implements OnModuleInit {
                 type: this.getHistoryType(response, history, inspectData),
             }, ['assetId', 'uniqueId'])
         }
-        */
     }
+
+    private getHistoryType(response: any, history: any, inspectData: any): HistoryType {
+        if (!history) {
+            if (response.origin === 8) return HistoryType.TRADED_UP
+            if (response.origin === 4) return HistoryType.DROPPED
+            if (response.origin === 1) return HistoryType.PURCHASED_INGAME
+            if (response.origin === 2) return HistoryType.UNBOXED
+            if (response.origin === 3) return HistoryType.CRAFTED
+            return HistoryType.UNKNOWN
+        }
+
+        if (history?.owner !== inspectData?.ms) {
+            if (history?.owner?.startsWith('7656')) {
+                return HistoryType.TRADE
+            }
+            if (history?.owner && !history?.owner?.startsWith('7656')) {
+                return HistoryType.MARKET_BUY
+            }
+        }
+
+        if (history?.owner && history.owner.startsWith('7656') && !inspectData?.ms?.startsWith('7656')) {
+            return HistoryType.MARKET_LISTING
+        }
+
+        if (history.owner === inspectData.ms) {
+            const stickerChanges = this.detectStickerChanges(response.stickers, history.stickers)
+            if (stickerChanges) return stickerChanges
+
+            const keychainChanges = this.detectKeychainChanges(response.keychains, history.keychains)
+            if (keychainChanges) return keychainChanges
+        }
+
+        if (response.customname !== history.customName) {
+            return response.customname ? HistoryType.NAMETAG_ADDED : HistoryType.NAMETAG_REMOVED
+        }
+
+        return HistoryType.UNKNOWN
+    }
+
+
+    private detectStickerChanges(currentStickers: any[], previousStickers: any[]): HistoryType | null {
+        if (!currentStickers || !previousStickers) return null
+
+        // Check if stickers have been added or removed
+        if (currentStickers.length > previousStickers.length) {
+            return HistoryType.STICKER_APPLY
+        }
+
+        if (currentStickers.length < previousStickers.length) {
+            return HistoryType.STICKER_REMOVE
+        }
+
+        // If the count is the same, check for position or wear changes
+        for (const current of currentStickers) {
+            // [{"slot": 2, "wear": 0.6399999856948853, "scale": null, "pattern": null, "tint_id": null, "offset_x": -0.5572507381439209, "offset_y": -0.019832462072372437, "offset_z": null, "rotation": null, "sticker_id": 8541}]
+            // Find matching sticker in previous collection based on position
+            const previous = previousStickers.find(
+                prev => prev.offset_x === current.offset_x &&
+                    prev.offset_y === current.offset_y &&
+                    prev.offset_z === current.offset_z &&
+                    prev.rotation === current.rotation &&
+                    prev.slot === current.slot &&
+                    prev.sticker_id === current.sticker_id
+            )
+
+            // No matching sticker found at this position - indicates change
+            if (!previous) {
+                if (currentStickers.length === previousStickers.length) {
+                    return HistoryType.STICKER_CHANGE
+                }
+
+                return HistoryType.STICKER_REMOVE
+            }
+
+            // Sticker found but wear value changed
+            if (previous && current.wear !== previous.wear) {
+                // Higher wear value means more scraped
+                if (current.wear > previous.wear) {
+                    return HistoryType.STICKER_SCRAPE
+                }
+                return HistoryType.STICKER_CHANGE
+            }
+        }
+
+        return null
+    }
+
+    private detectKeychainChanges(currentKeychains: any[], previousKeychains: any[]): HistoryType | null {
+        if (!currentKeychains || !previousKeychains) return null
+
+        if (currentKeychains.length === 0 && previousKeychains.length > 0) {
+            return HistoryType.KEYCHAIN_REMOVED
+        }
+        if (currentKeychains.length > 0 && previousKeychains.length === 0) {
+            return HistoryType.KEYCHAIN_ADDED
+        }
+        if (JSON.stringify(currentKeychains) !== JSON.stringify(previousKeychains)) {
+            return HistoryType.KEYCHAIN_CHANGED
+        }
+        return null
+    }
+
 
     private async saveAsset(response: any, inspectData: any, uniqueId: string) {
         await this.assetRepository.upsert({
