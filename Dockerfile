@@ -37,7 +37,7 @@ RUN mkdir -p sessions && chmod 777 sessions
 ENV NODE_ENV=production
 
 # Optimize for worker threads and memory allocation
-ENV NODE_OPTIONS="--max-old-space-size=8096 --experimental-worker"
+ENV NODE_OPTIONS="--experimental-worker"
 ENV UV_THREADPOOL_SIZE=64
 
 # Bot worker configuration 
