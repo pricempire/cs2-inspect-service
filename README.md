@@ -4,7 +4,7 @@ This is a simple inspect service for the CS2. The service is built using [Nest.j
 
 ## Installation
 
-It is recommended to use pnpm to install the dependencies. If you don't have pnpm installed, you can install it using the following command: 
+It is recommended to use pnpm to install the dependencies. If you don't have pnpm installed, you can install it using the following command:
 
 ```bash
 $ npm install -g pnpm
@@ -52,31 +52,29 @@ Then, you can run the Docker container using the following command:
 $ docker run -p 3000:3000 -d cs2-inspect-server
 ```
 
-
 ## Configuration
 
-The server is configured to run on port 3000. If you want to change the port, you can do so by modifying the `PORT` environment variable in the `.env` file. 
-    
+The server is configured to run on port 3000. If you want to change the port, you can do so by modifying the `PORT` environment variable in the `.env` file.
+
 ```bash
 PORT=3000
 ```
 
 ### Database
 
-The server uses a PostgreSQL database to store the data. The database is configured using the environment variables in the `.env` file. 
+The server uses a PostgreSQL database to store the data. The database is configured using the environment variables in the `.env` file.
 
 ```bash
 POSTGRESQL_HOST=
 POSTGRESQL_PORT=
-POSTGRESQL_USER=
+POSTGRESQL_USERNAME=
 POSTGRESQL_PASSWORD=
 POSTGRESQL_DB=
 ```
 
-
 ### Redis
 
-The server uses a Redis database to store the session data. The database is configured using the environment variables in the `.env` file. 
+The server uses a Redis database to store the session data. The database is configured using the environment variables in the `.env` file.
 
 ```bash
 REDIS_HOST=
@@ -86,7 +84,7 @@ REDIS_PASSWORD=
 
 ### Proxy
 
-The server uses a proxy to connect to the internet. The proxy is configured using the environment variables in the `.env` file. 
+The server uses a proxy to connect to the internet. The proxy is configured using the environment variables in the `.env` file.
 
 ```bash
 PROXY_URL=[socks5|http]://[username][session]:[password]@[url]:[port]
@@ -94,7 +92,7 @@ PROXY_URL=[socks5|http]://[username][session]:[password]@[url]:[port]
 
 ### Ping Pricempire
 
-You can share the data with Pricempire by setting the `PING_PRICEMPIRE` environment variable to `true`. 
+You can share the data with Pricempire by setting the `PING_PRICEMPIRE` environment variable to `true`.
 
 ```bash
 PING_PRICEMPIRE=true
@@ -102,7 +100,7 @@ PING_PRICEMPIRE=true
 
 ### Refresh Stickers
 
-You can refresh the stickers by setting the `ALLOW_REFRESH` environment variable to `true`. 
+You can refresh the stickers by setting the `ALLOW_REFRESH` environment variable to `true`.
 
 ```bash
 ALLOW_REFRESH=true
@@ -114,12 +112,11 @@ Pass `true` to the `refresh` query parameter to refresh the stickers. (This will
 $ curl -X GET -H "Content-Type: application/json" http://localhost:3000/?url=steam://rungame/730/76561202255233023/+csgo_econ_action_preview%20S76561198023809011A35678726741D4649654965632117657&refresh=true
 ```
 
-
 ### Logging
 
-You can enable logging for the PostgreSQL database by setting the `POSTGRESQL_LOGGING` environment variable to `true`. 
+You can enable logging for the PostgreSQL database by setting the `POSTGRESQL_LOGGING` environment variable to `true`.
 
-```bash 
+```bash
 POSTGRESQL_LOGGING=true
 ```
 
@@ -133,7 +130,7 @@ GC_DEBUG=true
 
 ### accounts.txt
 
-The `accounts.txt` file contains the accounts that are used to authenticate the users. The file is located in the `root` directory. 
+The `accounts.txt` file contains the accounts that are used to authenticate the users. The file is located in the `root` directory.
 
 ```bash
 # accounts.txt
@@ -143,14 +140,14 @@ username2:password2
 
 ### .env
 
-The `.env` file contains the environment variables that are used to configure the server. 
+The `.env` file contains the environment variables that are used to configure the server.
 
 ```bash
 # .env
 PORT=3000
 POSTGRESQL_HOST=
 POSTGRESQL_PORT=
-POSTGRESQL_USER=
+POSTGRESQL_USERNAME=
 POSTGRESQL_PASSWORD=
 POSTGRESQL_DB=
 REDIS_HOST=
@@ -195,7 +192,7 @@ This endpoint is used to inspect the data that is being sent to the server.
 $ curl -X GET -H "Content-Type: application/json" http://localhost:3000/?url=steam://rungame/730/76561202255233023/+csgo_econ_action_preview%20S76561198023809011A35678726741D4649654965632117657
 ```
 
-##### Response 
+##### Response
 
 ```json
 {
@@ -255,7 +252,6 @@ POSTGRESQL_DB_SOURCE=
 
 This will import the data from the old CSFloat database to the new database.
 
-
 # Contributing
 
 If you want to contribute to the project, you can do so by creating a pull request.
@@ -273,9 +269,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Axios](https://axios-http.com/)
 - [CS2](https://blog.counter-strike.net/)
 - [node-globaloffensive](https://github.com/DoctorMcKay/node-globaloffensive)
-- [node-steam-user](https://github.com/DoctorMcKay/node-steam-user) 
+- [node-steam-user](https://github.com/DoctorMcKay/node-steam-user)
 
-# Thanks To 
+# Thanks To
 
 - [DoctorMcKay](https://github.com/DoctorMcKay)
 - [CSFloat.com](https://csfloat.com/)
@@ -283,4 +279,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 # Contact
 
 If you have any questions, you can contact me at [Discord](https://discord.gg/pricempire).
-
