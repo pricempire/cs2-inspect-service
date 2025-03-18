@@ -314,7 +314,7 @@ export class WorkerManagerService implements OnModuleInit {
                 }
 
                 // Log for debugging
-                const actionType = status === 'busy' ? 'started' : 'completed';
+                // const actionType = status === 'busy' ? 'started' : 'completed';
                 // this.logger.debug(`Bot ${username} in worker ${workerId} ${actionType} inspection for asset ${assetId}`);
                 // this.logger.debug(`Updated worker stats: ready=${workerInfo.stats.readyBots}, busy=${workerInfo.stats.busyBots}, cooldown=${workerInfo.stats.cooldownBots}, error=${workerInfo.stats.errorBots}, disconnected=${workerInfo.stats.disconnectedBots}`);
             } catch (error) {
