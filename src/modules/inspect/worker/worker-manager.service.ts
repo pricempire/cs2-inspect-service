@@ -42,12 +42,7 @@ export class WorkerManagerService implements OnModuleInit {
     private readonly logger = new Logger(WorkerManagerService.name);
     private bots: Map<string, Bot> = new Map();
     private accounts: string[] = [];
-    private throttledAccounts: Map<string, number> = new Map();
-    private readonly THROTTLE_COOLDOWN = 30 * 60 * 1000; // 30 minutes
-    private readonly MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3');
-    private readonly MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_INIT || '10');
     private readonly BOTS_PER_WORKER = parseInt(process.env.BOTS_PER_WORKER || '50');
-    private readonly WORKER_TIMEOUT = parseInt(process.env.WORKER_TIMEOUT || '60000'); // 1 minute
 
     private workers: WorkerInfo[] = [];
     private nextWorkerId = 0;
@@ -72,13 +67,6 @@ export class WorkerManagerService implements OnModuleInit {
 
     // Keep track of the last 5 minutes of inspections
     private readonly STATS_HISTORY_PERIOD = 5 * 60 * 1000; // 5 minutes in ms
-
-    constructor(
-        @InjectRepository(Asset)
-        private assetRepository: Repository<Asset>,
-        @InjectRepository(History)
-        private historyRepository: Repository<History>,
-    ) { }
 
     async onModuleInit() {
         if (process.env.WORKER_ENABLED !== 'true') {

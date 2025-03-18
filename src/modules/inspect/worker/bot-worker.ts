@@ -87,7 +87,7 @@ class BotWorker {
                         debug: process.env.DEBUG === 'true',
                         sessionPath,
                         blacklistPath: process.env.BLACKLIST_PATH || './blacklist.txt',
-                        inspectTimeout: 1000,
+                        inspectTimeout: parseInt(process.env.INSPECT_TIMEOUT || '10000'),
                         cooldownTime: parseInt(process.env.BOT_COOLDOWN_TIME || '30000'),
                     });
 
