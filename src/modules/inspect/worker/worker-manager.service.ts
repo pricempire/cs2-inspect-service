@@ -70,7 +70,7 @@ export class WorkerManagerService implements OnModuleInit {
 
     async onModuleInit() {
         if (process.env.WORKER_ENABLED !== 'true') {
-            this.logger.warn('Worker initialization is disabled. Set WORKER_ENABLED=true to enable.');
+            // this.logger.warn('Worker initialization is disabled. Set WORKER_ENABLED=true to enable.');
             return;
         }
 
@@ -79,7 +79,7 @@ export class WorkerManagerService implements OnModuleInit {
         if (this.accounts.length > 0) {
             await this.createWorkers();
         } else {
-            this.logger.warn('No accounts loaded, workers will not be created');
+            // this.logger.warn('No accounts loaded, workers will not be created');
         }
 
         // Set up periodic cleanup of stale inspect requests
@@ -106,7 +106,7 @@ export class WorkerManagerService implements OnModuleInit {
                     clearTimeout(request.timeoutId);
                     request.reject(new Error('Request timed out during processing'));
                 } catch (e) {
-                    this.logger.error(`Error rejecting stale request: ${e.message}`);
+                    // this.logger.error(`Error rejecting stale request: ${e.message}`);
                 }
 
                 this.inspectRequests.delete(assetId);
@@ -116,13 +116,13 @@ export class WorkerManagerService implements OnModuleInit {
         }
 
         if (cleanedCount > 0) {
-            this.logger.warn(`Cleaned up ${cleanedCount} stale inspect requests`);
+            // this.logger.warn(`Cleaned up ${cleanedCount} stale inspect requests`);
         }
     }
 
     private async loadAccounts(): Promise<void> {
         const accountsFile = process.env.ACCOUNTS_FILE || 'accounts.txt';
-        this.logger.debug(`Loading accounts from ${accountsFile}`);
+        // this.logger.debug(`Loading accounts from ${accountsFile}`);
 
         try {
             // Try loading from the specified file
@@ -143,14 +143,14 @@ export class WorkerManagerService implements OnModuleInit {
                 if (fs.existsSync(location)) {
                     const content = fs.readFileSync(location, 'utf8');
                     this.processAccountFile(content);
-                    this.logger.debug(`Loaded accounts from fallback location: ${location}`);
+                    // this.logger.debug(`Loaded accounts from fallback location: ${location}`);
                     return;
                 }
             }
 
             throw new Error(`Accounts file not found at ${accountsFile} or fallback locations`);
         } catch (error) {
-            this.logger.error(`Failed to load accounts: ${error.message}`);
+            // this.logger.error(`Failed to load accounts: ${error.message}`);
         }
     }
 
@@ -162,12 +162,12 @@ export class WorkerManagerService implements OnModuleInit {
         // Randomize accounts for better distribution
         this.accounts = this.accounts.sort(() => Math.random() - 0.5);
 
-        this.logger.log(`Loaded ${this.accounts.length} accounts`);
+        // this.logger.log(`Loaded ${this.accounts.length} accounts`);
     }
 
     private async createWorkers(): Promise<void> {
         const numWorkers = Math.ceil(this.accounts.length / this.BOTS_PER_WORKER);
-        this.logger.log(`Creating ${numWorkers} workers for ${this.accounts.length} accounts (${this.BOTS_PER_WORKER} bots per worker)`);
+        // this.logger.log(`Creating ${numWorkers} workers for ${this.accounts.length} accounts (${this.BOTS_PER_WORKER} bots per worker)`);
 
         for (let i = 0; i < numWorkers; i++) {
             const workerAccounts = this.accounts.slice(
@@ -178,7 +178,7 @@ export class WorkerManagerService implements OnModuleInit {
             await this.createWorker(i, workerAccounts);
         }
 
-        this.logger.log(`All ${numWorkers} workers created and initializing`);
+        // this.logger.log(`All ${numWorkers} workers created and initializing`);
     }
 
     private async createWorker(workerId: number, accounts: string[]): Promise<void> {
@@ -213,9 +213,9 @@ export class WorkerManagerService implements OnModuleInit {
             // Set up event handlers
             this.setupWorkerCommunication(worker, workerId);
 
-            this.logger.debug(`Worker ${workerId} created with ${accounts.length} accounts`);
+            // this.logger.debug(`Worker ${workerId} created with ${accounts.length} accounts`);
         } catch (error) {
-            this.logger.error(`Failed to create worker ${workerId}: ${error.message}`);
+            // this.logger.error(`Failed to create worker ${workerId}: ${error.message}`);
         }
     }
 
@@ -238,24 +238,24 @@ export class WorkerManagerService implements OnModuleInit {
                     this.updateWorkerStats(workerId, message.stats);
                     break;
                 case 'shutdown':
-                    this.logger.log(`Worker ${workerId} shut down successfully`);
+                    // this.logger.log(`Worker ${workerId} shut down successfully`);
                     this.removeWorker(workerId);
                     break;
                 default:
-                    this.logger.warn(`Unknown message from worker ${workerId}: ${message.type}`);
+                // this.logger.warn(`Unknown message from worker ${workerId}: ${message.type}`);
             }
         });
 
         worker.on('error', (error) => {
-            this.logger.error(`Worker ${workerId} error: ${error.message}`);
+            // this.logger.error(`Worker ${workerId} error: ${error.message}`);
             this.updateWorkerStatus(workerId, 'error');
         });
 
         worker.on('exit', (code) => {
             if (code !== 0) {
-                this.logger.error(`Worker ${workerId} exited with code ${code}`);
+                // this.logger.error(`Worker ${workerId} exited with code ${code}`);
             } else {
-                this.logger.log(`Worker ${workerId} exited cleanly`);
+                // this.logger.log(`Worker ${workerId} exited cleanly`);
             }
             this.removeWorker(workerId);
         });
@@ -263,7 +263,7 @@ export class WorkerManagerService implements OnModuleInit {
 
     private handleBotInitialized(message: any): void {
         const { workerId, username, status } = message;
-        this.logger.debug(`Bot ${username} initialized in worker ${workerId} with status ${status}`);
+        // this.logger.debug(`Bot ${username} initialized in worker ${workerId} with status ${status}`);
 
         // Update worker status if there's at least one ready bot
         if (status === 'ready') {
@@ -275,7 +275,7 @@ export class WorkerManagerService implements OnModuleInit {
                 // Request fresh stats after bot initialization
                 workerInfo.worker.postMessage({ type: 'getStats' });
 
-                this.logger.debug(`Worker ${workerId} marked as ready with at least one ready bot`);
+                // this.logger.debug(`Worker ${workerId} marked as ready with at least one ready bot`);
             }
         }
     }
@@ -318,7 +318,7 @@ export class WorkerManagerService implements OnModuleInit {
                 // this.logger.debug(`Bot ${username} in worker ${workerId} ${actionType} inspection for asset ${assetId}`);
                 // this.logger.debug(`Updated worker stats: ready=${workerInfo.stats.readyBots}, busy=${workerInfo.stats.busyBots}, cooldown=${workerInfo.stats.cooldownBots}, error=${workerInfo.stats.errorBots}, disconnected=${workerInfo.stats.disconnectedBots}`);
             } catch (error) {
-                this.logger.error(`Error updating stats after bot status change: ${error.message}`);
+                // this.logger.error(`Error updating stats after bot status change: ${error.message}`);
             }
         }
     }
@@ -328,7 +328,7 @@ export class WorkerManagerService implements OnModuleInit {
 
         const request = this.inspectRequests.get(assetId);
         if (!request) {
-            this.logger.warn(`Received inspect result for unknown request: ${assetId}`);
+            // this.logger.warn(`Received inspect result for unknown request: ${assetId}`);
             return;
         }
 
@@ -337,7 +337,7 @@ export class WorkerManagerService implements OnModuleInit {
             this.trackInspectionSuccess(assetId, Date.now() - request.startTime!);
             request.resolve(result);
         } catch (error) {
-            this.logger.error(`Error handling inspect result: ${error.message}`);
+            // this.logger.error(`Error handling inspect result: ${error.message}`);
             request.reject(error);
         } finally {
             this.inspectRequests.delete(assetId);
@@ -349,7 +349,7 @@ export class WorkerManagerService implements OnModuleInit {
 
         const request = this.inspectRequests.get(assetId);
         if (!request) {
-            this.logger.warn(`Received inspect error for unknown request: ${assetId}`);
+            // this.logger.warn(`Received inspect error for unknown request: ${assetId}`);
             return;
         }
 
@@ -375,20 +375,22 @@ export class WorkerManagerService implements OnModuleInit {
                 prevStats.cooldownBots !== stats.cooldownBots ||
                 prevStats.disconnectedBots !== stats.disconnectedBots) {
 
-                this.logger.debug(`Worker ${workerId} stats changed: ready=${prevStats.readyBots}->${stats.readyBots}, ` +
+                /*
+             // this.logger.debug(`Worker ${workerId} stats changed: ready=${prevStats.readyBots}->${stats.readyBots}, ` +
                     `busy=${prevStats.busyBots}->${stats.busyBots}, ` +
                     `error=${prevStats.errorBots}->${stats.errorBots}, ` +
                     `cooldown=${prevStats.cooldownBots}->${stats.cooldownBots}, ` +
                     `disconnected=${prevStats.disconnectedBots}->${stats.disconnectedBots}`);
+                */
             }
 
             // Update worker status based on available bots
             if (stats.readyBots > 0 && workerInfo.status !== 'ready') {
                 this.updateWorkerStatus(workerId, 'ready');
-                this.logger.debug(`Worker ${workerId} marked ready with ${stats.readyBots} ready bots`);
+                // this.logger.debug(`Worker ${workerId} marked ready with ${stats.readyBots} ready bots`);
             } else if (stats.readyBots === 0 && stats.totalBots > 0 && workerInfo.status === 'ready') {
                 // Still mark as ready but log a warning
-                this.logger.warn(`Worker ${workerId} has no ready bots but status is ready`);
+                // this.logger.warn(`Worker ${workerId} has no ready bots but status is ready`);
             }
 
             // Update the bots map with the latest status information from the worker
@@ -398,7 +400,7 @@ export class WorkerManagerService implements OnModuleInit {
                     if (bot) {
                         // We can't update the bot status directly, but we can track it in our map
                         // This helps ensure our getStats() method returns accurate information
-                        this.logger.debug(`Bot ${botDetail.username} status from worker: ${botDetail.status}`);
+                        // this.logger.debug(`Bot ${botDetail.username} status from worker: ${botDetail.status}`);
                     }
                 }
             }
@@ -454,10 +456,12 @@ export class WorkerManagerService implements OnModuleInit {
 
         if (availableWorkers.length === 0) {
             // Log detailed information about all workers for debugging
-            this.logger.warn(`No available workers found. Worker states:`);
+            // this.logger.warn(`No available workers found. Worker states:`);
+            /*
             this.workers.forEach(w => {
-                this.logger.warn(`Worker ${w.id}: status=${w.status}, readyBots=${w.stats.readyBots}, totalBots=${w.stats.totalBots}`);
+             // this.logger.warn(`Worker ${w.id}: status=${w.status}, readyBots=${w.stats.readyBots}, totalBots=${w.stats.totalBots}`);
             });
+            */
 
             // Refresh stats from all workers
             this.workers.forEach(w => {
@@ -465,7 +469,7 @@ export class WorkerManagerService implements OnModuleInit {
                     try {
                         w.worker.postMessage({ type: 'getStats' });
                     } catch (e) {
-                        this.logger.error(`Error requesting stats from worker ${w.id}: ${e.message}`);
+                        // this.logger.error(`Error requesting stats from worker ${w.id}: ${e.message}`);
                     }
                 }
             });
@@ -478,7 +482,7 @@ export class WorkerManagerService implements OnModuleInit {
         this.nextWorkerId = (this.nextWorkerId + 1) % Math.max(1, availableWorkers.length);
 
         const selectedWorker = availableWorkers[workerIndex];
-        this.logger.debug(`Selected worker ${selectedWorker.id} with ${selectedWorker.stats.readyBots} ready bots`);
+        // this.logger.debug(`Selected worker ${selectedWorker.id} with ${selectedWorker.stats.readyBots} ready bots`);
 
         return selectedWorker;
     }
@@ -494,7 +498,7 @@ export class WorkerManagerService implements OnModuleInit {
             // Start the inspection with retry tracking
             return this.executeInspection(s, a, d, m, requestId, retryCount);
         } catch (error) {
-            this.logger.error(`Error inspecting item: ${error.message}`);
+            // this.logger.error(`Error inspecting item: ${error.message}`);
             throw error;
         }
     }
@@ -536,12 +540,12 @@ export class WorkerManagerService implements OnModuleInit {
                 });
             });
         } catch (error) {
-            this.logger.error(`Error during inspection attempt ${retryCount + 1}: ${error.message}`);
+            // this.logger.error(`Error during inspection attempt ${retryCount + 1}: ${error.message}`);
 
             // If we still have retries left and this is a timeout/availability error, try again
             if (retryCount < MAX_RETRIES &&
                 (error.message.includes('timed out') || error.message.includes('No workers with available bots'))) {
-                this.logger.warn(`Retrying inspection for asset ${a} (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+                // this.logger.warn(`Retrying inspection for asset ${a} (attempt ${retryCount + 1}/${MAX_RETRIES})`);
 
                 // Wait a moment before retrying
                 await new Promise(resolve => setTimeout(resolve, 1000));
@@ -565,7 +569,7 @@ export class WorkerManagerService implements OnModuleInit {
         const request = this.inspectRequests.get(assetId);
 
         if (!request) {
-            this.logger.warn(`Cannot handle timeout for request ${requestId} - request not found`);
+            // this.logger.warn(`Cannot handle timeout for request ${requestId} - request not found`);
             return;
         }
 
@@ -575,7 +579,7 @@ export class WorkerManagerService implements OnModuleInit {
         if (retryCount < maxRetries) {
             // We still have retries left
             this.incrementRetriedInspections();
-            this.logger.warn(`Inspection timeout for asset ${assetId} (attempt ${retryCount + 1}/${maxRetries + 1}). Retrying with a different bot...`);
+            //this.logger.warn(`Inspection timeout for asset ${assetId} (attempt ${retryCount + 1}/${maxRetries + 1}). Retrying with a different bot...`);
 
             // Remove the current request from the map
             this.inspectRequests.delete(assetId);
@@ -592,7 +596,7 @@ export class WorkerManagerService implements OnModuleInit {
         } else {
             // No more retries left, report as timeout
             this.timeouts++;
-            this.logger.error(`All retry attempts exhausted for asset ${assetId}. Reporting as timeout.`);
+            // this.logger.error(`All retry attempts exhausted for asset ${assetId}. Reporting as timeout.`);
 
             // Track the timeout in our metrics
             if (duration) {
