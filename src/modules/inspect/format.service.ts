@@ -132,6 +132,7 @@ export class FormatService implements OnModuleInit {
                 }
                 return {
                     iteminfo: {
+                        asset_id: asset.assetId,
                         defindex: asset.defIndex,
                         rarity: asset.rarity,
                         quality: asset.quality,
@@ -154,6 +155,7 @@ export class FormatService implements OnModuleInit {
 
         return {
             iteminfo: {
+                asset_id: asset.assetId,
                 defindex: asset.defIndex,
                 paintindex: asset.paintIndex,
                 rarity: asset.rarity,
@@ -179,6 +181,7 @@ export class FormatService implements OnModuleInit {
 
         return {
             iteminfo: {
+                asset_id: asset.assetId,
                 defindex: asset.defIndex,
                 paintindex: asset.paintIndex,
                 rarity: asset.rarity,
@@ -198,6 +201,7 @@ export class FormatService implements OnModuleInit {
         const graffitiId = asset.stickers[0].sticker_id
         return {
             iteminfo: {
+                asset_id: asset.assetId,
                 defindex: asset.defIndex,
                 paintindex: asset.paintIndex,
                 rarity: asset.rarity,
@@ -218,6 +222,7 @@ export class FormatService implements OnModuleInit {
 
         return {
             iteminfo: {
+                asset_id: asset.assetId,
                 defindex: asset.defIndex,
                 rarity: asset.rarity,
                 quality: asset.quality,
@@ -241,6 +246,7 @@ export class FormatService implements OnModuleInit {
         const marketHashName = this.buildMarketHashName(weapon, paint, meta)
         return {
             iteminfo: {
+                asset_id: asset.assetId,
                 defindex: asset.defIndex,
                 paintindex: asset.paintIndex,
                 rarity: asset.rarity,

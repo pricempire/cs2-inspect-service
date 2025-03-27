@@ -47,6 +47,7 @@ export interface StickerKeychain {
 
 export interface FormattedResponse {
     iteminfo: {
+        asset_id: number;
         defindex: number;
         paintindex?: number;
         rarity: number;
