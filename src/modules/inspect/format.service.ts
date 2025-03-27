@@ -102,7 +102,8 @@ export class FormatService implements OnModuleInit {
     private createMetadata(asset: Asset, rank?: Rankings): Metadata {
         return {
             wear: asset.paintWear ? this.getWear(asset.paintWear) : undefined,
-            rank: rank?.lowRank,
+            low_rank: rank?.lowRank,
+            high_rank: rank?.highRank,
             totalCount: rank?.globalHigh,
             paintIndex: asset.paintIndex,
             defIndex: asset.defIndex,
@@ -269,7 +270,8 @@ export class FormatService implements OnModuleInit {
                 })) ?? [],
                 image: paint?.image,
                 type: 'Weapon',
-                rank: meta.rank,
+                low_rank: meta.low_rank,
+                high_rank: meta.high_rank,
                 total_count: meta.totalCount,
                 souvenir: meta.quality === 12,
                 stattrak: meta.killeaterValue !== null,

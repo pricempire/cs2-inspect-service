@@ -20,7 +20,8 @@ export interface Schema {
 
 export interface Metadata {
     wear?: string;
-    rank?: number;
+    low_rank?: number;
+    high_rank?: number;
     totalCount?: number;
     paintIndex?: number;
     defIndex: number;
@@ -63,7 +64,8 @@ export interface FormattedResponse {
         stattrak?: boolean;
         image?: string;
         type: 'Weapon' | 'Sticker' | 'Graffiti' | 'Agent' | 'Keychain' | 'Unknown';
-        rank?: number;
+        low_rank?: number;
+        high_rank?: number;
         total_count?: number;
         stickers?: StickerKeychain[];
         keychains?: StickerKeychain[];

@@ -51,7 +51,7 @@ export class MainModule {
     /**
      * Refresh the materialized view "rankings"
      */
-    @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+    @Cron(CronExpression.EVERY_HOUR)
     async handleCron() {
         if (this.isRunning) {
             this.logger.debug('Cron job is already running, skipping')
