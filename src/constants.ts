@@ -31,6 +31,20 @@ const weaponNames = {
     'five_seven': 'Five-Seven',
     'ak47': 'AK-47',
     'glock': 'Glock-18',
+    'm4a4': 'M4A4',
+    'm4a1-s': 'M4A1-S',
+    'ump': 'UMP-45',
+    'mac10': 'MAC-10',
+    'mp7': 'MP7',
+    'mp5': 'MP5-SD',
+    'p90': 'P90',
+    'pp-bizon': 'PP-Bizon',
+    'r8': 'R8 Revolver',
+    'shadow_daggers': 'Shadow Daggers',
+    'deagle': 'Desert Eagle',
+    'g3sg1': 'G3SG1',
+    'sg556': 'SG 553',
+    'ssg08': 'SSG 08',
 };
 
 const patternTypes = {
