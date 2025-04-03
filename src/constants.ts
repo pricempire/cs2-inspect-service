@@ -45,6 +45,11 @@ const weaponNames = {
     'g3sg1': 'G3SG1',
     'sg556': 'SG 553',
     'ssg08': 'SSG 08',
+    'm249': 'M249',
+    'negev': 'Negev',
+    'sawed-off': 'Sawed-Off',
+    'nova': 'Nova',
+    'mag7': 'MAG-7',
 };
 
 const patternTypes = {
