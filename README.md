@@ -1,6 +1,6 @@
 # CS2 Inspect service
 
-This is a simple inspect service for the CS2. The service is built using [Nest.js](https://nestjs.com/), [TypeORM](https://typeorm.io/), [Redis](https://redis.io/), and [PostgreSQL](https://www.postgresql.org/).
+This is a simple inspect service for the CS2. The service is built using [Nest.js](https://nestjs.com/), [TypeORM](https://typeorm.io/), and [PostgreSQL](https://www.postgresql.org/).
 
 ## Installation
 
@@ -72,16 +72,6 @@ POSTGRESQL_PASSWORD=
 POSTGRESQL_DB=
 ```
 
-### Redis
-
-The server uses a Redis database to store the session data. The database is configured using the environment variables in the `.env` file.
-
-```bash
-REDIS_HOST=
-REDIS_PORT=
-REDIS_PASSWORD=
-```
-
 ### Proxy
 
 The server uses a proxy to connect to the internet. The proxy is configured using the environment variables in the `.env` file.
@@ -150,9 +140,6 @@ POSTGRESQL_PORT=
 POSTGRESQL_USERNAME=
 POSTGRESQL_PASSWORD=
 POSTGRESQL_DB=
-REDIS_HOST=
-REDIS_PORT=
-REDIS_PASSWORD=
 PROXY_URL=[socks5|http]://[username][session]:[password]@[url]:[port]
 POSTGRESQL_LOGGING=false
 GC_DEBUG=false
@@ -264,7 +251,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [Nest.js](https://nestjs.com/)
 - [TypeORM](https://typeorm.io/)
-- [Redis](https://redis.io/)
 - [PostgreSQL](https://www.postgresql.org/)
 - [Axios](https://axios-http.com/)
 - [CS2](https://blog.counter-strike.net/)
