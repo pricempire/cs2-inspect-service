@@ -89,7 +89,7 @@ importers:
         version: 5.1.0
       globaloffensive:
         specifier: ^3.2.0
-        version: 3.2.0(steam-user@5.2.0)
+        version: 3.2.0(steam-user@https://codeload.github.com/antal-k/node-steam-user/tar.gz/c99fb3b0012fb0edb656396cde30876159d97273)
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.17.7)(ts-node@10.9.2(@types/node@20.17.7)(typescript@5.7.2))
@@ -109,8 +109,8 @@ importers:
         specifier: ^0.5.21
         version: 0.5.21
       steam-user:
-        specifier: ^5.2.0
-        version: 5.2.0
+        specifier: https://github.com/antal-k/node-steam-user.git
+        version: https://codeload.github.com/antal-k/node-steam-user/tar.gz/c99fb3b0012fb0edb656396cde30876159d97273
       supertest:
         specifier: ^6.3.4
         version: 6.3.4
@@ -1872,6 +1872,7 @@ packages:
 
   globaloffensive@3.2.0:
     resolution: {integrity: sha512-4k1pCfWK7UYM18f3sYULTtT37owEPtDIHHLd6uBl4yTtHK+Px31+eiZ6Syt5/J6+/SF9gpMp7cIRrKhsjQkUZg==}
+    version: 3.2.0
     engines: {node: '>=14.0.0'}
     peerDependencies:
       steam-user: '>=4.2.0'
@@ -3017,8 +3018,9 @@ packages:
     resolution: {integrity: sha512-bTKlc/NoIUQId+my+O556s55DDsNNXfVIPWFDNVu68beql7AJhV0c+GTjFxfwCDYfdc4NkAme+0WrDdnY2D2VA==}
     engines: {node: '>=6.0.0'}
 
-  steam-user@5.2.0:
-    resolution: {integrity: sha512-GzDou8anDZOw0VgkTj6TybnEKjqSktdizz756UtjDBgh1ONnvI8HCw/FXKmpKmFnyf8iTshHcw16ATLC3WLP/Q==}
+  steam-user@https://codeload.github.com/antal-k/node-steam-user/tar.gz/c99fb3b0012fb0edb656396cde30876159d97273:
+    resolution: {tarball: https://codeload.github.com/antal-k/node-steam-user/tar.gz/c99fb3b0012fb0edb656396cde30876159d97273}
+    version: 5.2.0
     engines: {node: '>=14.0.0'}
 
   steamid@1.1.3:
@@ -5566,13 +5568,13 @@ snapshots:
     dependencies:
       big-number: 2.0.0
 
-  globaloffensive@3.2.0(steam-user@5.2.0):
+  globaloffensive@3.2.0(steam-user@https://codeload.github.com/antal-k/node-steam-user/tar.gz/c99fb3b0012fb0edb656396cde30876159d97273):
     dependencies:
       bytebuffer: 5.0.1
       globaloffensive-sharecode: 1.1.1
       long: 5.2.3
       protobufjs: 7.4.0
-      steam-user: 5.2.0
+      steam-user: https://codeload.github.com/antal-k/node-steam-user/tar.gz/c99fb3b0012fb0edb656396cde30876159d97273
       steamid: 2.1.0
 
   globals@11.12.0: {}
@@ -6879,7 +6881,7 @@ snapshots:
 
   steam-totp@2.1.2: {}
 
-  steam-user@5.2.0:
+  steam-user@https://codeload.github.com/antal-k/node-steam-user/tar.gz/c99fb3b0012fb0edb656396cde30876159d97273:
     dependencies:
       '@bbob/parser': 2.9.0
       '@doctormckay/stdlib': 2.10.0
