@@ -420,7 +420,7 @@ export class InspectService implements OnModuleInit {
             musicIndex: response.musicindex,
             entIndex: response.entindex,
             dropReason: response.dropreason,
-        }, ['assetId'])
+        }, ['uniqueId'])
 
         return await this.assetRepository.findOne({
             where: {
