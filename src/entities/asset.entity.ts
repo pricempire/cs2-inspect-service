@@ -18,6 +18,8 @@ import {
 @Index('asset_special_flags', ['isStattrak', 'isSouvenir'])
 @Index('asset_custom_details', ['customName', 'questId', 'reason'])
 @Index('asset_misc', ['musicIndex', 'entIndex'])
+@Index('asset_paint_wear', ['paintWear'])
+@Index('asset_paint_seed', ['paintSeed'])
 @Entity()
 export class Asset {
     @Column()
