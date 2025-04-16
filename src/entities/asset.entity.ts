@@ -12,14 +12,13 @@ import {
 @Index('asset_ms_assetId_d_stickers', ['ms', 'assetId', 'd', 'stickers'], {
     unique: true,
 })
-@Index('asset_unique_id', ['uniqueId'])
-@Index('asset_paint_details', ['paintSeed', 'paintIndex', 'paintWear'])
-@Index('asset_item_details', ['defIndex', 'quality', 'rarity', 'origin'])
+@Index('asset_unique_id', ['uniqueId'], { unique: true })
 @Index('asset_special_flags', ['isStattrak', 'isSouvenir'])
-@Index('asset_custom_details', ['customName', 'questId', 'reason'])
-@Index('asset_misc', ['musicIndex', 'entIndex'])
 @Index('asset_paint_wear', ['paintWear'])
 @Index('asset_paint_seed', ['paintSeed'])
+@Index('asset_item_rarity', ['rarity'])
+@Index('asset_item_defIndex', ['defIndex'])
+@Index('asset_item_paintIndex', ['paintIndex'])
 @Entity()
 export class Asset {
     @Column()
