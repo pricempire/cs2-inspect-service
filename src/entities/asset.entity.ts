@@ -19,6 +19,8 @@ import {
 @Index('asset_item_rarity', ['rarity'])
 @Index('asset_item_defIndex', ['defIndex'])
 @Index('asset_item_paintIndex', ['paintIndex'])
+@Index('asset_item_updated_at', ['updatedAt'])
+@Index('asset_item_created_at', ['createdAt'])
 @Entity()
 export class Asset {
     @Column()
