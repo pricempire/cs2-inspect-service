@@ -173,6 +173,23 @@ export class InspectService implements OnModuleInit {
                     clearTimeout(timeoutId);
                     this.success++;
 
+                    if (!response.paintseed) {
+                        this.logger.error(`No paintseed found for item ${a}, probably a sticker or keychain. Returning null`);
+                        this.failed++;
+                        this.queueService.remove(a);
+                        resolve({
+                            iteminfo: {
+                                asset_id: a,
+                                defindex: d,
+                                rarity: response.rarity,
+                                quality: response.quality,
+                                origin: response.origin,
+                                ...response
+                            }
+                        });
+                        return;
+                    }
+
                     try {
                         const formattedResponse = await this.handleInspectResult(response);
                         // Remove from queue after successful processing
