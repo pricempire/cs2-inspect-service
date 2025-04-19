@@ -11,6 +11,7 @@ export interface InspectRequest {
     retryCount: number;
     inspectUrl: { s: string; a: string; d: string; m: string };
     timeoutId: NodeJS.Timeout;
+    priority?: 'high' | 'normal' | 'low';
 }
 
 @Injectable()
@@ -33,7 +34,8 @@ export class QueueService extends EventEmitter {
 
         const fullRequest = {
             ...request,
-            startTime: Date.now()
+            startTime: Date.now(),
+            priority: request.priority || 'normal'
         };
 
         this.queue.set(assetId, fullRequest);
@@ -77,6 +79,26 @@ export class QueueService extends EventEmitter {
             .filter(([_, request]) => now - request.startTime > this.timeout);
     }
 
+    public getNextBatch(batchSize: number): [string, InspectRequest][] {
+        // Get all items sorted by priority and then by startTime
+        const sortedEntries = Array.from(this.queue.entries())
+            .sort(([_, a], [__, b]) => {
+                // First sort by priority (high > normal > low)
+                const priorityOrder = { high: 0, normal: 1, low: 2 };
+                const priorityDiff = priorityOrder[a.priority || 'normal'] - priorityOrder[b.priority || 'normal'];
+
+                // If same priority, sort by start time (oldest first)
+                if (priorityDiff === 0) {
+                    return a.startTime - b.startTime;
+                }
+
+                return priorityDiff;
+            });
+
+        // Return the top items based on batch size
+        return sortedEntries.slice(0, batchSize);
+    }
+
     public getQueueMetrics() {
         const now = Date.now();
         return {
@@ -86,7 +108,8 @@ export class QueueService extends EventEmitter {
             items: Array.from(this.queue.entries()).map(([assetId, request]) => ({
                 assetId,
                 elapsedTime: now - request.startTime,
-                retryCount: request.retryCount
+                retryCount: request.retryCount,
+                priority: request.priority || 'normal'
             })),
             averageWaitTime: this.calculateAverageWaitTime()
         };

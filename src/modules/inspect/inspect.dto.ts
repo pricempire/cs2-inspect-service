@@ -1,5 +1,6 @@
-import { IsOptional, IsString, Matches } from 'class-validator'
+; import { IsBoolean, IsOptional, IsString, Matches } from 'class-validator'
 import { Transform } from 'class-transformer'
+
 export class InspectDto {
     @IsOptional()
     @IsString()
@@ -51,4 +52,14 @@ export class InspectDto {
     // }) 
     // TODO: Add validation
     url?: string
+
+    @IsOptional()
+    @IsBoolean()
+    @Transform(({ value }) => value === 'true')
+    reply?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    @Transform(({ value }) => value === 'true')
+    lowPriority?: boolean;
 }

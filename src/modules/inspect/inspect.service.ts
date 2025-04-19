@@ -32,6 +32,7 @@ export class InspectService implements OnModuleInit {
         startTime?: number
         retryCount?: number
         inspectUrl?: { s: string, a: string, d: string, m: string }
+        priority: string
     }> = new Map()
 
     private currentRequests = 0
@@ -80,6 +81,18 @@ export class InspectService implements OnModuleInit {
         const responseTimeStats = stats.responseTimeStats;
         const metrics = stats.metrics;
 
+        // Get queue metrics including priority information
+        const queueMetrics = this.queueService.getQueueMetrics();
+        const priorityCounts = {
+            high: 0,
+            normal: 0,
+            low: 0
+        };
+
+        queueMetrics.items.forEach(item => {
+            priorityCounts[item.priority]++;
+        });
+
         // Return a clean, well-organized stats structure
         return {
             uptime: `${days}d ${hours}h ${minutes}m ${seconds}s`,
@@ -98,6 +111,7 @@ export class InspectService implements OnModuleInit {
                 queue: {
                     current: this.inspects.size,
                     max: this.MAX_QUEUE_SIZE,
+                    priorities: priorityCounts
                 },
             },
             inspections: {
@@ -149,6 +163,20 @@ export class InspectService implements OnModuleInit {
             );
         }
 
+        // If reply is false, acknowledge receipt and process in background
+        if (query.reply === false) {
+            // Start the inspection process in the background
+            this.processInspectionInBackground(s, a, d, m, query.lowPriority);
+
+            // Return immediate acknowledgment
+            return {
+                success: true,
+                message: 'Inspection request received and being processed in background',
+                assetId: a
+            };
+        }
+
+        // Normal flow - wait for inspection to complete
         return new Promise((resolve, reject) => {
             const timeoutId = setTimeout(() => {
                 this.timeouts++;
@@ -163,11 +191,12 @@ export class InspectService implements OnModuleInit {
                 reject,
                 timeoutId,
                 retryCount: 0,
-                inspectUrl: { s, a, d, m }
+                inspectUrl: { s, a, d, m },
+                priority: query.lowPriority ? 'low' : 'normal'
             });
 
             // Try using the worker manager
-            this.workerManagerService.inspectItem(s, a, d, m)
+            this.workerManagerService.inspectItem(s, a, d, m, query.lowPriority ? 'low' : 'normal')
                 .then(async (response) => {
                     clearTimeout(timeoutId);
                     this.success++;
@@ -201,6 +230,57 @@ export class InspectService implements OnModuleInit {
                     ));
                 });
         });
+    }
+
+    /**
+     * Process an inspection request in the background without waiting for the result
+     */
+    private async processInspectionInBackground(s: string, a: string, d: string, m: string, lowPriority?: boolean): Promise<void> {
+        try {
+            // Add to queue with dummy resolve/reject handlers
+            this.queueService.add(a, {
+                ms: m !== '0' && m ? m : s,
+                d,
+                resolve: () => {
+                    this.logger.debug(`Background inspection for item ${a} completed successfully`);
+                    this.success++;
+                },
+                reject: (error) => {
+                    this.logger.error(`Background inspection for item ${a} failed: ${error.message}`);
+                    this.failed++;
+                },
+                timeoutId: setTimeout(() => {
+                    this.logger.warn(`Background inspection for item ${a} timed out`);
+                    this.timeouts++;
+                    this.queueService.remove(a);
+                }, this.QUEUE_TIMEOUT),
+                retryCount: 0,
+                inspectUrl: { s, a, d, m },
+                priority: lowPriority ? 'low' : 'normal'
+            });
+
+            // Process with the worker manager
+            this.workerManagerService.inspectItem(s, a, d, m, lowPriority ? 'low' : 'normal')
+                .then(async (response) => {
+                    try {
+                        await this.handleInspectResult(response, {
+                            ms: m !== '0' && m ? m : s,
+                            d,
+                        });
+                        this.logger.debug(`Successfully processed background inspection for item ${a}`);
+                    } catch (error) {
+                        this.logger.error(`Error handling background inspection result: ${error.message}`);
+                    } finally {
+                        this.queueService.remove(a);
+                    }
+                })
+                .catch(error => {
+                    this.logger.error(`Background inspection error for asset ${a}: ${error.message}`);
+                    this.queueService.remove(a);
+                });
+        } catch (error) {
+            this.logger.error(`Failed to start background inspection for asset ${a}: ${error.message}`);
+        }
     }
 
     private async handleInspectResult(response: any, inspectData: any) {

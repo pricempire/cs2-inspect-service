@@ -35,6 +35,7 @@ interface InspectRequest {
     inspectUrl?: { s: string, a: string, d: string, m: string };
     ms?: string;
     requestId: string;
+    priority?: 'high' | 'normal' | 'low';
 }
 
 @Injectable()
@@ -487,7 +488,7 @@ export class WorkerManagerService implements OnModuleInit {
         return selectedWorker;
     }
 
-    public async inspectItem(s: string, a: string, d: string, m: string): Promise<any> {
+    public async inspectItem(s: string, a: string, d: string, m: string, priority: 'high' | 'normal' | 'low' = 'normal'): Promise<any> {
         try {
             // Create a unique request ID
             const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
@@ -496,14 +497,22 @@ export class WorkerManagerService implements OnModuleInit {
             const retryCount = 0;
 
             // Start the inspection with retry tracking
-            return this.executeInspection(s, a, d, m, requestId, retryCount);
+            return this.executeInspection(s, a, d, m, requestId, retryCount, priority);
         } catch (error) {
             // this.logger.error(`Error inspecting item: ${error.message}`);
             throw error;
         }
     }
 
-    private async executeInspection(s: string, a: string, d: string, m: string, requestId: string, retryCount: number): Promise<any> {
+    private async executeInspection(
+        s: string,
+        a: string,
+        d: string,
+        m: string,
+        requestId: string,
+        retryCount: number,
+        priority: 'high' | 'normal' | 'low' = 'normal'
+    ): Promise<any> {
         const MAX_RETRIES = parseInt(process.env.MAX_INSPECT_RETRIES || '3');
 
         try {
@@ -517,7 +526,7 @@ export class WorkerManagerService implements OnModuleInit {
                 // Create timeout to handle inspection timeouts
                 const timeoutId = setTimeout(() => {
                     // Handle timeout with retry logic
-                    this.handleInspectionTimeout(s, a, d, m, requestId, retryCount, MAX_RETRIES, resolve, reject);
+                    this.handleInspectionTimeout(s, a, d, m, requestId, retryCount, MAX_RETRIES, resolve, reject, priority);
                 }, 10000);
 
                 // Store the promise handlers and inspection data
@@ -529,14 +538,16 @@ export class WorkerManagerService implements OnModuleInit {
                     retryCount,
                     inspectUrl: { s, a, d, m },
                     ms: m !== '0' && m ? m : s,
-                    requestId
+                    requestId,
+                    priority
                 });
 
                 // Send the inspect request to the worker
                 worker.worker.postMessage({
                     type: 'inspectItem',
                     s, a, d, m,
-                    requestId
+                    requestId,
+                    priority
                 });
             });
         } catch (error) {
@@ -551,7 +562,7 @@ export class WorkerManagerService implements OnModuleInit {
                 await new Promise(resolve => setTimeout(resolve, 1000));
 
                 // Retry with incremented retry count
-                return this.executeInspection(s, a, d, m, requestId, retryCount + 1);
+                return this.executeInspection(s, a, d, m, requestId, retryCount + 1, priority);
             }
 
             // Otherwise, give up
@@ -563,7 +574,8 @@ export class WorkerManagerService implements OnModuleInit {
         s: string, a: string, d: string, m: string,
         requestId: string, retryCount: number, maxRetries: number,
         resolve: (value: any) => void,
-        reject: (reason?: any) => void
+        reject: (reason?: any) => void,
+        priority: 'high' | 'normal' | 'low' = 'normal'
     ): void {
         const assetId = a;
         const request = this.inspectRequests.get(assetId);
@@ -585,7 +597,7 @@ export class WorkerManagerService implements OnModuleInit {
             this.inspectRequests.delete(assetId);
 
             // Try again with a different bot
-            this.executeInspection(s, a, d, m, requestId, retryCount + 1)
+            this.executeInspection(s, a, d, m, requestId, retryCount + 1, priority)
                 .then(result => {
                     this.incrementSuccessAfterRetry();
                     resolve(result);
