@@ -208,13 +208,11 @@ export class InspectService implements OnModuleInit {
         }
 
         try {
-            // Start timing the response
-            const startTime = Date.now();
 
             const uniqueId = this.generateUniqueId({
                 paintSeed: response.paintseed,
-                paintIndex: response.paintindex,
-                paintWear: response.paintwear,
+                paintIndex: response.paintindex === null ? 0 : response.paintindex,
+                paintWear: response.paintwear === null ? 0 : response.paintwear,
                 defIndex: response.defindex,
                 origin: response.origin,
                 rarity: response.rarity,
@@ -406,9 +404,9 @@ export class InspectService implements OnModuleInit {
             ms: inspectData.ms,
             d: inspectData.d,
             assetId: response.itemid,
-            paintSeed: response.paintseed,
-            paintIndex: response.paintindex,
-            paintWear: response.paintwear,
+            paintSeed: response.paintseed === null ? 0 : response.paintseed,
+            paintIndex: response.paintindex === null ? 0 : response.paintindex,
+            paintWear: response.paintwear === null ? 0 : response.paintwear,
             customName: response.customname,
             defIndex: response.defindex,
             origin: response.origin,
