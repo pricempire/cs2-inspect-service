@@ -180,6 +180,7 @@ export class InspectService implements OnModuleInit {
                         this.logger.debug(`Successfully processed and removed item ${a} from queue`);
                         resolve(formattedResponse);
                     } catch (error) {
+                        console.log(response);
                         this.logger.error(`Error handling inspect result: ${error.message}`);
                         this.failed++;
                         // Ensure we remove the item from queue on error too
@@ -403,6 +404,7 @@ export class InspectService implements OnModuleInit {
 
 
     private async saveAsset(response: any, inspectData: any, uniqueId: string) {
+
         await this.assetRepository.upsert({
             uniqueId,
             ms: inspectData.ms,
