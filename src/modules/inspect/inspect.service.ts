@@ -173,23 +173,6 @@ export class InspectService implements OnModuleInit {
                     clearTimeout(timeoutId);
                     this.success++;
 
-                    if (!response.paintseed) {
-                        this.logger.error(`No paintseed found for item ${a}, probably a sticker or keychain. Returning null`);
-                        this.failed++;
-                        this.queueService.remove(a);
-                        resolve({
-                            iteminfo: {
-                                asset_id: a,
-                                defindex: d,
-                                rarity: response.rarity,
-                                quality: response.quality,
-                                origin: response.origin,
-                                ...response
-                            }
-                        });
-                        return;
-                    }
-
                     try {
                         const formattedResponse = await this.handleInspectResult(response);
                         // Remove from queue after successful processing
@@ -226,7 +209,6 @@ export class InspectService implements OnModuleInit {
         }
 
         try {
-
             const uniqueId = this.generateUniqueId({
                 paintSeed: response.paintseed,
                 paintIndex: response.paintindex === null ? 0 : response.paintindex,
@@ -238,18 +220,22 @@ export class InspectService implements OnModuleInit {
                 quality: response.quality,
                 dropReason: response.dropreason
             });
-
-            const history = await this.findHistory(response);
-
             // Only save history if the paintseed is present and the paintindex is not 0
             if (
                 response.paintseed &&
                 response.paintwear !== null &&
                 response.paintindex !== null
             ) {
+                const history = await this.findHistory(response);
                 await this.saveHistory(response, history, inspectData, uniqueId);
             }
             const asset = await this.saveAsset(response, inspectData, uniqueId);
+
+            if (!asset) {
+                console.log(response);
+                this.logger.error(`No asset found for item ${response.itemid}`);
+                throw new Error(`No asset found for item ${response.itemid}`);
+            }
 
             const formattedResponse = await this.formatService.formatResponse(asset);
             return formattedResponse;
@@ -421,7 +407,31 @@ export class InspectService implements OnModuleInit {
 
 
     private async saveAsset(response: any, inspectData: any, uniqueId: string) {
-
+        console.log({
+            uniqueId,
+            ms: inspectData.ms,
+            d: inspectData.d,
+            assetId: response.itemid,
+            paintSeed: response.paintseed === null ? 0 : response.paintseed,
+            paintIndex: response.paintindex === null ? 0 : response.paintindex,
+            paintWear: response.paintwear === null ? 0 : response.paintwear,
+            customName: response.customname,
+            defIndex: response.defindex,
+            origin: response.origin,
+            rarity: response.rarity,
+            questId: response.questid,
+            stickers: response.stickers,
+            quality: response.quality,
+            keychains: response.keychains,
+            killeaterScoreType: response.killeaterscoretype,
+            killeaterValue: response.killeatervalue,
+            inventory: response.inventory,
+            petIndex: response.petindex,
+            musicIndex: response.musicindex,
+            entIndex: response.entindex,
+            dropReason: response.dropreason,
+            updatedAt: new Date(),
+        });
         await this.assetRepository.upsert({
             uniqueId,
             ms: inspectData.ms,
