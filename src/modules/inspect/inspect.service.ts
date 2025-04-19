@@ -224,7 +224,11 @@ export class InspectService implements OnModuleInit {
             const history = await this.findHistory(response);
 
             // Only save history if the paintseed is present and the paintindex is not 0
-            if (response.paintseed && response.paintindex !== 0) {
+            if (
+                response.paintseed &&
+                response.paintwear !== null &&
+                response.paintindex !== null
+            ) {
                 await this.saveHistory(response, history, inspectData, uniqueId);
             }
             const asset = await this.saveAsset(response, inspectData, uniqueId);
