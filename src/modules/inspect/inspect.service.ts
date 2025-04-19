@@ -151,7 +151,6 @@ export class InspectService implements OnModuleInit {
 
         return new Promise((resolve, reject) => {
             const timeoutId = setTimeout(() => {
-                this.queueService.remove(a);
                 this.timeouts++;
                 reject(new HttpException('Inspection request timed out', HttpStatus.GATEWAY_TIMEOUT));
             }, this.QUEUE_TIMEOUT);
@@ -174,7 +173,10 @@ export class InspectService implements OnModuleInit {
                     this.success++;
 
                     try {
-                        const formattedResponse = await this.handleInspectResult(response);
+                        const formattedResponse = await this.handleInspectResult(response, {
+                            ms: m !== '0' && m ? m : s,
+                            d,
+                        });
                         // Remove from queue after successful processing
                         this.queueService.remove(a);
                         this.logger.debug(`Successfully processed and removed item ${a} from queue`);
@@ -201,13 +203,7 @@ export class InspectService implements OnModuleInit {
         });
     }
 
-    private async handleInspectResult(response: any) {
-        const inspectData = this.queueService.get(response.itemid?.toString());
-        if (!inspectData) {
-            this.logger.error(`No inspect data found for item ${response.itemid}`);
-            throw new Error(`No inspect data found for item ${response.itemid}`);
-        }
-
+    private async handleInspectResult(response: any, inspectData: any) {
         try {
             const uniqueId = this.generateUniqueId({
                 paintSeed: response.paintseed,
