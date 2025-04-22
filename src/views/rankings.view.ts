@@ -11,7 +11,7 @@ import { ViewEntity, ViewColumn, Unique, Index } from 'typeorm'
             DENSE_RANK() OVER(PARTITION BY "paint_index", "def_index", "is_stattrak", "is_souvenir" ORDER BY "paint_wear" ASC) AS "high_rank",
             "asset_id"
         FROM asset
-        WHERE "paint_wear" IS NOT NULL AND "paint_wear" > 0
+        WHERE "paint_wear" IS NOT NULL AND "paint_wear" > 0 
     `,
 })
 @Index(['assetId'], { unique: true })

@@ -5,6 +5,8 @@ import { InspectModule } from './inspect/inspect.module'
 import { Cron, CronExpression, ScheduleModule } from '@nestjs/schedule'
 import { DataSource } from 'typeorm'
 import 'dotenv/config'
+import { AddStickerGin1745363608133 } from 'src/migrations/1745363608133-add_sticker_gin';
+import { AddCharmsGin1745363888409 } from 'src/migrations/1745363888409-add_charms_gin';
 
 @Module({
     imports: [
@@ -19,6 +21,11 @@ import 'dotenv/config'
             namingStrategy: new SnakeNamingStrategy(),
             logging: process.env.POSTGRESQL_LOGGING === 'true',
             autoLoadEntities: true,
+            migrations: [
+                AddStickerGin1745363608133,
+                AddCharmsGin1745363888409,
+            ],
+            migrationsRun: true,
             synchronize: true,
         }),
         InspectModule,
