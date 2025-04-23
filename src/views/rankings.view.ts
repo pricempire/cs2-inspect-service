@@ -15,10 +15,10 @@ import { ViewEntity, ViewColumn, Unique, Index } from 'typeorm'
             WHERE "paint_wear" IS NOT NULL AND "paint_wear" > 0 
         )
         SELECT * FROM ranked_assets
-        WHERE "global_low" > 50 
-           OR "global_high" > 50 
-           OR "low_rank" > 50 
-           OR "high_rank" > 50
+        WHERE "global_low" <= 500
+           OR "global_high" <= 500 
+           OR "low_rank" <= 500 
+           OR "high_rank" <= 500
     `,
 })
 @Index(['assetId'], { unique: true })
