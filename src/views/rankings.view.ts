@@ -236,38 +236,44 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
                     ELSE ROUND(100 * ((va."paint_wear" - va.min_wear) / (va.max_wear - va.min_wear)))
                 END AS percentile_high
             FROM valid_assets va
+        ),
+        -- Filter ranked assets
+        ranked_filtered AS (
+            SELECT *
+            FROM ranked_assets
+            WHERE 
+                global_low_rank <= 100 OR 
+                global_high_rank <= 100 OR 
+                item_low_rank <= 100 OR 
+                item_high_rank <= 100 OR
+                rarity_tier <= 2
         )
-        -- Final selection with ranking criteria
-        SELECT
-            ra."unique_id" AS "unique_id",
-            ra.wear_category AS "wear_category",
-            ra.global_low_rank AS "global_low",
-            ra.global_high_rank AS "global_high",
-            ra.item_low_rank AS "low_rank",
-            ra.item_high_rank AS "high_rank",
-            ra.percentile_low AS "better_than_percent_low",
-            ra.percentile_high AS "better_than_percent_high",
-            ra.category_count AS "total_in_category",
-            ra."paint_index" AS "paint_index",
-            ra."def_index" AS "def_index",
-            ra.is_stattrak AS "is_stattrak",
-            ra.is_souvenir AS "is_souvenir",
-            ra."paint_wear" AS "paint_wear",
-            ra.rarity_tier AS "rarity_tier"
-        FROM ranked_assets ra
-        WHERE 
-            ra.global_low_rank <= 100 OR 
-            ra.global_high_rank <= 100 OR 
-            ra.item_low_rank <= 100 OR 
-            ra.item_high_rank <= 100 OR
-            ra.rarity_tier <= 2
+        -- Final selection with ranking criteria, ensuring uniqueness
+        SELECT DISTINCT ON (rf."unique_id")
+            rf."unique_id" AS "unique_id",
+            rf.wear_category AS "wear_category",
+            rf.global_low_rank AS "global_low",
+            rf.global_high_rank AS "global_high",
+            rf.item_low_rank AS "low_rank",
+            rf.item_high_rank AS "high_rank",
+            rf.percentile_low AS "better_than_percent_low",
+            rf.percentile_high AS "better_than_percent_high",
+            rf.category_count AS "total_in_category",
+            rf."paint_index" AS "paint_index",
+            rf."def_index" AS "def_index",
+            rf.is_stattrak AS "is_stattrak",
+            rf.is_souvenir AS "is_souvenir",
+            rf."paint_wear" AS "paint_wear",
+            rf.rarity_tier AS "rarity_tier"
+        FROM ranked_filtered rf
         ORDER BY 
-            ra.rarity_tier,
+            rf."unique_id",
+            rf.rarity_tier,
             GREATEST(
-                100 - COALESCE(ra.global_low_rank, 0), 
-                100 - COALESCE(ra.global_high_rank, 0),
-                100 - COALESCE(ra.item_low_rank, 0),
-                100 - COALESCE(ra.item_high_rank, 0)
+                100 - COALESCE(rf.global_low_rank, 0), 
+                100 - COALESCE(rf.global_high_rank, 0),
+                100 - COALESCE(rf.item_low_rank, 0),
+                100 - COALESCE(rf.item_high_rank, 0)
             ) DESC
     `,
 })
