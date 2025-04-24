@@ -87,7 +87,7 @@ export class FormatService implements OnModuleInit {
 
     public async formatResponse(asset: Asset): Promise<FormattedResponse> {
         const rank = await this.rankingRepository.findOne({
-            where: { assetId: asset.assetId },
+            where: { uniqueId: asset.uniqueId },
         })
 
         const meta = this.createMetadata(asset, rank)
