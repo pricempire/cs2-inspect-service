@@ -23,6 +23,8 @@ import {
 @Index('asset_item_created_at', ['createdAt'])
 @Index('asset_stickers_gin', ['stickers'])
 @Index('asset_charms_gin', ['keychains'])
+@Index('asset_rankings_view', ['paintIndex', 'defIndex', 'isStattrak', 'isSouvenir', 'paintWear'])
+@Index('asset_rankings_wear_thresholds', ['paintWear', 'paintIndex', 'defIndex'])
 @Entity()
 export class Asset {
     @Column()
