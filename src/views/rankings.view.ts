@@ -271,12 +271,12 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
             ) DESC
     `,
 })
-@Index(['uniqueId'], { unique: true })
-@Index(['wearCategory', 'globalLow'])
-@Index(['wearCategory', 'globalHigh'])
-@Index(['paintIndex', 'defIndex', 'isStattrak', 'isSouvenir', 'wearCategory', 'lowRank'])
-@Index(['paintIndex', 'defIndex', 'isStattrak', 'isSouvenir', 'wearCategory', 'highRank'])
-@Index(['rarityTier'])
+@Index('rankings_unique_id', ['uniqueId'], { unique: true })
+@Index('rankings_wear_category_global_low', ['wearCategory', 'globalLow'])
+@Index('rankings_wear_category_global_high', ['wearCategory', 'globalHigh'])
+@Index('rankings_paint_index_def_index_is_stattrak_is_souvenir_wear_category_low_rank', ['paintIndex', 'defIndex', 'isStattrak', 'isSouvenir', 'wearCategory', 'lowRank'])
+@Index('rankings_paint_index_def_index_is_stattrak_is_souvenir_wear_category_high_rank', ['paintIndex', 'defIndex', 'isStattrak', 'isSouvenir', 'wearCategory', 'highRank'])
+@Index('rankings_rarity_tier', ['rarityTier'])
 export class Rankings {
     @ViewColumn()
     uniqueId: string
