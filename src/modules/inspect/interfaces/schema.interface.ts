@@ -1,3 +1,5 @@
+import { Rankings } from "src/views/rankings.view";
+
 export interface Weapon {
     name: string;
     paints: Record<string, Paint>;
@@ -18,11 +20,14 @@ export interface Schema {
     keychains: Record<string, { market_hash_name: string }>;
 }
 
+
+
 export interface Metadata {
     wear?: string;
     low_rank?: number;
     high_rank?: number;
     totalCount?: number;
+    rank?: Rankings;
     paintIndex?: number;
     defIndex: number;
     quality: number;

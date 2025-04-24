@@ -105,6 +105,7 @@ export class FormatService implements OnModuleInit {
             low_rank: rank?.lowRank,
             high_rank: rank?.highRank,
             totalCount: rank?.globalHigh,
+            rank,
             paintIndex: asset.paintIndex,
             defIndex: asset.defIndex,
             quality: asset.quality,
