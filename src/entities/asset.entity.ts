@@ -13,7 +13,6 @@ import {
     unique: true,
 })
 @Index('asset_unique_id', ['uniqueId'], { unique: true })
-@Index('asset_special_flags', ['isStattrak', 'isSouvenir'])
 @Index('asset_paint_wear', ['paintWear'])
 @Index('asset_paint_seed', ['paintSeed'])
 @Index('asset_item_rarity', ['rarity'])
@@ -116,16 +115,6 @@ export class Asset {
     entIndex: number
 
     @Column({
-        default: false,
-    })
-    isStattrak: boolean
-
-    @Column({
-        default: false,
-    })
-    isSouvenir: boolean
-
-    @Column({
         type: 'jsonb',
         nullable: true,
     })
@@ -165,6 +154,14 @@ export class Asset {
         type: 'smallint',
     })
     dropReason: number
+
+    get isStattrak(): boolean {
+        return this.killeaterValue !== null
+    }
+
+    get isSouvenir(): boolean {
+        return this.quality === 12
+    }
 
     @CreateDateColumn()
     createdAt: Date

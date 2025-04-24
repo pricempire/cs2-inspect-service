@@ -483,31 +483,6 @@ export class InspectService implements OnModuleInit {
 
 
     private async saveAsset(response: any, inspectData: any, uniqueId: string) {
-        console.log({
-            uniqueId,
-            ms: inspectData.ms,
-            d: inspectData.d,
-            assetId: response.itemid,
-            paintSeed: response.paintseed === null ? 0 : response.paintseed,
-            paintIndex: response.paintindex === null ? 0 : response.paintindex,
-            paintWear: response.paintwear === null ? 0 : response.paintwear,
-            customName: response.customname,
-            defIndex: response.defindex,
-            origin: response.origin,
-            rarity: response.rarity,
-            questId: response.questid,
-            stickers: response.stickers,
-            quality: response.quality,
-            keychains: response.keychains,
-            killeaterScoreType: response.killeaterscoretype,
-            killeaterValue: response.killeatervalue,
-            inventory: response.inventory,
-            petIndex: response.petindex,
-            musicIndex: response.musicindex,
-            entIndex: response.entindex,
-            dropReason: response.dropreason,
-            updatedAt: new Date(),
-        });
         await this.assetRepository.upsert({
             uniqueId,
             ms: inspectData.ms,
