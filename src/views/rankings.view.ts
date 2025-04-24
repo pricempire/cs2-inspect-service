@@ -9,7 +9,7 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
         -- Get extreme low float values (top candidates)
         extreme_low_floats AS (
             SELECT
-                "asset_id", "paint_wear", "paint_index", "def_index",
+                "unique_id", "paint_wear", "paint_index", "def_index",
                 "killeater_value" IS NOT NULL AS is_stattrak,
                 "quality" = 12 AS is_souvenir,
                 1 AS rarity_tier
@@ -22,7 +22,7 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
         -- Get extreme high float values
         extreme_high_floats AS (
             SELECT
-                "asset_id", "paint_wear", "paint_index", "def_index",
+                "unique_id", "paint_wear", "paint_index", "def_index",
                 "killeater_value" IS NOT NULL AS is_stattrak,
                 "quality" = 12 AS is_souvenir,
                 1 AS rarity_tier
@@ -34,7 +34,7 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
         -- Get very low float values
         very_low_floats AS (
             SELECT
-                "asset_id", "paint_wear", "paint_index", "def_index",
+                "unique_id", "paint_wear", "paint_index", "def_index",
                 "killeater_value" IS NOT NULL AS is_stattrak,
                 "quality" = 12 AS is_souvenir,
                 2 AS rarity_tier
@@ -46,7 +46,7 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
         -- Get very high float values
         very_high_floats AS (
             SELECT
-                "asset_id", "paint_wear", "paint_index", "def_index",
+                "unique_id", "paint_wear", "paint_index", "def_index",
                 "killeater_value" IS NOT NULL AS is_stattrak,
                 "quality" = 12 AS is_souvenir,
                 2 AS rarity_tier
@@ -58,7 +58,7 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
         -- Get float values near category boundaries
         boundary_fn_mw AS (
             SELECT 
-                "asset_id", "paint_wear", "paint_index", "def_index", 
+                "unique_id", "paint_wear", "paint_index", "def_index", 
                 "killeater_value" IS NOT NULL AS is_stattrak,
                 "quality" = 12 AS is_souvenir,
                 3 AS rarity_tier
@@ -68,7 +68,7 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
         ),
         boundary_mw_ft AS (
             SELECT 
-                "asset_id", "paint_wear", "paint_index", "def_index", 
+                "unique_id", "paint_wear", "paint_index", "def_index", 
                 "killeater_value" IS NOT NULL AS is_stattrak,
                 "quality" = 12 AS is_souvenir,
                 3 AS rarity_tier
@@ -78,7 +78,7 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
         ),
         boundary_ft_ww AS (
             SELECT 
-                "asset_id", "paint_wear", "paint_index", "def_index", 
+                "unique_id", "paint_wear", "paint_index", "def_index", 
                 "killeater_value" IS NOT NULL AS is_stattrak,
                 "quality" = 12 AS is_souvenir,
                 3 AS rarity_tier
@@ -88,7 +88,7 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
         ),
         boundary_ww_bs AS (
             SELECT 
-                "asset_id", "paint_wear", "paint_index", "def_index", 
+                "unique_id", "paint_wear", "paint_index", "def_index", 
                 "killeater_value" IS NOT NULL AS is_stattrak,
                 "quality" = 12 AS is_souvenir,
                 3 AS rarity_tier
@@ -175,7 +175,7 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
         -- Join assets with their category stats
         valid_assets AS (
             SELECT
-                ca."asset_id",
+                ca."unique_id",
                 ca."paint_wear",
                 ca."paint_index",
                 ca."def_index",
@@ -239,21 +239,21 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
         )
         -- Final selection with ranking criteria
         SELECT
-            ra."asset_id" AS "uniqueId",
-            ra.wear_category AS "wearCategory",
-            ra.global_low_rank AS "globalLow",
-            ra.global_high_rank AS "globalHigh",
-            ra.item_low_rank AS "lowRank",
-            ra.item_high_rank AS "highRank",
-            ra.percentile_low AS "betterThanPercentLow",
-            ra.percentile_high AS "betterThanPercentHigh",
-            ra.category_count AS "totalInCategory",
-            ra."paint_index" AS "paintIndex",
-            ra."def_index" AS "defIndex",
-            ra.is_stattrak AS "isStattrak",
-            ra.is_souvenir AS "isSouvenir",
-            ra."paint_wear" AS "paintWear",
-            ra.rarity_tier AS "rarityTier"
+            ra."unique_id" AS "unique_id",
+            ra.wear_category AS "wear_category",
+            ra.global_low_rank AS "global_low",
+            ra.global_high_rank AS "global_high",
+            ra.item_low_rank AS "low_rank",
+            ra.item_high_rank AS "high_rank",
+            ra.percentile_low AS "better_than_percent_low",
+            ra.percentile_high AS "better_than_percent_high",
+            ra.category_count AS "total_in_category",
+            ra."paint_index" AS "paint_index",
+            ra."def_index" AS "def_index",
+            ra.is_stattrak AS "is_stattrak",
+            ra.is_souvenir AS "is_souvenir",
+            ra."paint_wear" AS "paint_wear",
+            ra.rarity_tier AS "rarity_tier"
         FROM ranked_assets ra
         WHERE 
             ra.global_low_rank <= 100 OR 
