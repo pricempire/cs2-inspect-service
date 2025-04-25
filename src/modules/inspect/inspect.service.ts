@@ -289,7 +289,12 @@ export class InspectService implements OnModuleInit {
                 paintSeed: response.paintseed,
                 paintIndex: response.paintindex === null ? 0 : response.paintindex,
                 paintWear: response.paintwear === null ? 0 : response.paintwear,
-                defIndex: response.defindex
+                defIndex: response.defindex,
+                origin: response.origin,
+                rarity: response.rarity,
+                questId: response.questid,
+                quality: response.quality,
+                dropReason: response.dropreason
             });
             // Only save history if the paintseed is present and the paintindex is not 0
             if (
@@ -516,12 +521,22 @@ export class InspectService implements OnModuleInit {
         paintIndex?: number,
         paintWear?: number,
         defIndex?: number,
+        origin?: number,
+        rarity?: number,
+        questId?: number,
+        quality?: number,
+        dropReason?: number
     }): string {
         const values = [
             item.paintSeed || 0,
             item.paintIndex || 0,
             item.paintWear || 0,
             item.defIndex || 0,
+            item.origin || 0,
+            item.rarity || 0,
+            item.questId || 0,
+            item.quality || 0,
+            item.dropReason || 0
         ]
         const stringToHash = values.join('-')
         return createHash('sha1').update(stringToHash).digest('hex').substring(0, 8)
