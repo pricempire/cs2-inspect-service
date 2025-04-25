@@ -1,10 +1,7 @@
 import { Logger, Module, OnModuleInit } from '@nestjs/common'
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm'
 import { DataSource } from 'typeorm'
-import { createHash } from 'crypto'
 import 'dotenv/config'
-import { promises as fs } from 'fs'
-import { HistoryType } from 'src/entities/history.entity'
 
 @Module({
     imports: [
@@ -28,7 +25,7 @@ import { HistoryType } from 'src/entities/history.entity'
         }),
     ],
 })
-export class FixAssetModule implements OnModuleInit {
+export class FixAssetModule {
     private readonly logger = new Logger(FixAssetModule.name)
     private limit = 200000
 
@@ -37,6 +34,7 @@ export class FixAssetModule implements OnModuleInit {
         @InjectDataSource('to') private toDataSource: DataSource,
     ) { }
 
+    /*
     async onModuleInit() {
         this.logger.debug('Fixing assets')
 
@@ -44,96 +42,114 @@ export class FixAssetModule implements OnModuleInit {
             await this.fix()
         }, 5000)
     }
+    */
 
     async fix() {
-        const count = await this.toDataSource.query(
-            'SELECT COUNT(asset_id) FROM "asset"'
-        )
+        this.logger.debug('Starting asset fix process');
 
-        this.logger.debug('Count of items in items: ' + count[0].count)
+        try {
+            // Enable pgcrypto extension for SHA1 hashing
+            await this.toDataSource.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
 
-        const batchSize = this.limit;
-        let lastId = 0;
-        let hasMoreData = true;
+            // Create a temporary function in Postgres to generate the unique ID
+            await this.toDataSource.query(`
+                CREATE OR REPLACE FUNCTION generate_unique_id(paint_seed INTEGER, paint_index INTEGER, paint_wear FLOAT, def_index INTEGER)
+                RETURNS VARCHAR AS $$
+                DECLARE
+                    hash VARCHAR;
+                BEGIN
+                    hash := encode(digest(CONCAT(
+                        COALESCE(paint_seed, 0)::TEXT, '-',
+                        COALESCE(paint_index, 0)::TEXT, '-',
+                        COALESCE(paint_wear, 0)::TEXT, '-',
+                        COALESCE(def_index, 0)::TEXT
+                    ), 'sha1'), 'hex');
+                    RETURN SUBSTRING(hash, 1, 8);
+                END;
+                $$ LANGUAGE plpgsql;
+            `);
 
-        const processAsset = async (asset) => {
-            const oldUniqueId = asset.unique_id;
-            const newUniqueId = this.generateUniqueId({
-                paintSeed: asset.paint_seed,
-                paintIndex: asset.paint_index,
-                paintWear: asset.paint_wear,
-                defIndex: asset.def_index,
-            });
+            // Count total assets to update
+            const count = await this.toDataSource.query('SELECT COUNT(asset_id) FROM "asset"');
+            this.logger.debug('Total assets to process: ' + count[0].count);
 
-            if (oldUniqueId !== newUniqueId) {
-                this.logger.debug('Unique ID mismatch for asset ' + asset.asset_id + ' - ' + oldUniqueId + ' != ' + newUniqueId);
+            // Execute all operations in a single SQL statement using CTEs
+            const result = await this.toDataSource.query(`
+                -- First CTE: Generate new unique IDs for all assets
+                WITH assets_with_new_ids AS (
+                    SELECT 
+                        asset_id,
+                        unique_id AS old_unique_id,
+                        generate_unique_id(paint_seed, paint_index, paint_wear, def_index) AS new_unique_id
+                    FROM "asset"
+                ),
+                
+                -- Second CTE: Find assets where old_unique_id != new_unique_id
+                changed_assets AS (
+                    SELECT * FROM assets_with_new_ids 
+                    WHERE old_unique_id != new_unique_id
+                ),
+                
+                -- Third CTE: Find which assets need to be deleted (duplicates)
+                assets_to_delete AS (
+                    SELECT ca.old_unique_id
+                    FROM changed_assets ca
+                    WHERE EXISTS (
+                        SELECT 1 FROM "asset" 
+                        WHERE unique_id = ca.new_unique_id
+                        AND unique_id != ca.old_unique_id
+                    )
+                ),
+                
+                -- Fourth CTE: Delete the duplicate assets and return count
+                deleted_assets AS (
+                    DELETE FROM "asset"
+                    WHERE unique_id IN (SELECT old_unique_id FROM assets_to_delete)
+                    RETURNING asset_id
+                ),
+                
+                -- Fifth CTE: Update assets that need new unique_ids (non-duplicates)
+                updated_assets AS (
+                    UPDATE "asset" a
+                    SET unique_id = ca.new_unique_id
+                    FROM changed_assets ca
+                    WHERE a.unique_id = ca.old_unique_id
+                    AND NOT EXISTS (SELECT 1 FROM assets_to_delete atd WHERE atd.old_unique_id = ca.old_unique_id)
+                    RETURNING a.asset_id
+                ),
+                
+                -- Sixth CTE: Update history records with new unique_ids
+                updated_history AS (
+                    UPDATE "history" h
+                    SET unique_id = ca.new_unique_id
+                    FROM changed_assets ca
+                    WHERE h.unique_id = ca.old_unique_id
+                    RETURNING h.id
+                )
+                
+                -- Final result counts
+                SELECT
+                    (SELECT COUNT(*) FROM changed_assets) AS total_changed,
+                    (SELECT COUNT(*) FROM deleted_assets) AS total_deleted,
+                    (SELECT COUNT(*) FROM updated_assets) AS total_assets_updated,
+                    (SELECT COUNT(*) FROM updated_history) AS total_history_updated;
+            `);
 
-                const alreadyExists = await this.toDataSource.query(
-                    `SELECT COUNT(unique_id) FROM "asset" WHERE unique_id = '${newUniqueId}'`
-                );
+            // Log results
+            this.logger.debug(`Results: 
+                Total assets needing change: ${result[0].total_changed}
+                Assets deleted (duplicates): ${result[0].total_deleted}
+                Assets updated: ${result[0].total_assets_updated}
+                History records updated: ${result[0].total_history_updated}
+            `);
 
-                if (alreadyExists[0].count > 0) {
-                    this.logger.debug('Unique ID already exists for asset ' + newUniqueId);
-                    await this.toDataSource.query(
-                        `DELETE FROM "asset" WHERE unique_id = '${oldUniqueId}'`
-                    );
-                    this.logger.debug('Deleted asset ' + oldUniqueId);
-                } else {
-                    await this.toDataSource.query(
-                        `UPDATE "asset" SET unique_id = '${newUniqueId}' WHERE unique_id = '${oldUniqueId}'`
-                    );
-                }
+            // Drop the temporary function
+            await this.toDataSource.query('DROP FUNCTION IF EXISTS generate_unique_id');
 
-                await this.toDataSource.query(
-                    `UPDATE "history" SET unique_id = '${newUniqueId}' WHERE unique_id = '${oldUniqueId}'`
-                );
-            }
-
-            return asset.asset_id;
-        };
-
-        while (hasMoreData) {
-            // Fetch a batch of assets
-            const assets = await this.toDataSource.query(
-                `SELECT asset_id, unique_id, paint_seed, paint_index, paint_wear, def_index FROM "asset" 
-                 WHERE asset_id > ${lastId} ORDER BY asset_id LIMIT ${batchSize}`
-            );
-
-            if (assets.length === 0) {
-                hasMoreData = false;
-                continue;
-            }
-
-            // Process all assets in the batch concurrently
-            const promises = assets.map(asset => processAsset(asset));
-            const results = await Promise.all(promises);
-
-            // Get the highest asset_id processed
-            lastId = Math.max(...results);
-            this.logger.debug(`Processed batch up to asset_id ${lastId}`);
+            this.logger.debug('Fix completed successfully');
+        } catch (error) {
+            this.logger.error('Error during fix process:', error);
+            throw error;
         }
-
-        this.logger.debug('Fix completed successfully');
-    }
-
-    /**
-     * Generate a unique ID for an asset
-     * @param item 
-     * @returns 
-     */
-    private generateUniqueId(item: {
-        paintSeed?: number,
-        paintIndex?: number,
-        paintWear?: number,
-        defIndex?: number,
-    }): string {
-        const values = [
-            item.paintSeed || 0,
-            item.paintIndex || 0,
-            item.paintWear || 0,
-            item.defIndex || 0,
-        ];
-        const stringToHash = values.join('-');
-        return createHash('sha1').update(stringToHash).digest('hex').substring(0, 8);
     }
 }
