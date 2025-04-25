@@ -541,9 +541,4 @@ export class InspectService implements OnModuleInit {
         const stringToHash = values.join('-')
         return createHash('sha1').update(stringToHash).digest('hex').substring(0, 8)
     }
-
-    // Implement the remaining methods (findHistory, saveHistory, getHistoryType, etc.)
-    // They can remain mostly unchanged since they don't involve bot management
-
-    // ... (rest of the existing service methods for history handling)
 }
