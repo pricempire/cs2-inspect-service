@@ -364,7 +364,7 @@ export class InspectService implements OnModuleInit {
         })
 
         if (!existing) {
-            await this.historyRepository.upsert({
+            await this.historyRepository.insert({
                 uniqueId,
                 assetId: parseInt(response.itemid),
                 prevAssetId: history?.assetId,
@@ -376,11 +376,11 @@ export class InspectService implements OnModuleInit {
                 prevStickers: history?.stickers,
                 prevKeychains: history?.keychains,
                 type: this.getHistoryType(response, history, inspectData),
-            }, ['assetId', 'uniqueId'])
+            })
         }
     }
 
-    private getHistoryType(response: any, history: any, inspectData: any): HistoryType {
+    private getHistoryType(response: any, history: History, inspectData: any): HistoryType {
         if (!history) {
             if (response.origin === 8) return HistoryType.TRADED_UP
             if (response.origin === 4) return HistoryType.DROPPED
@@ -391,15 +391,15 @@ export class InspectService implements OnModuleInit {
         }
 
         if (history?.owner !== inspectData?.ms) {
-            if (history?.owner?.startsWith('7656')) {
+            if (history?.owner?.toString().startsWith('7656')) {
                 return HistoryType.TRADE
             }
-            if (history?.owner && !history?.owner?.startsWith('7656')) {
+            if (history?.owner && !history?.owner?.toString().startsWith('7656')) {
                 return HistoryType.MARKET_BUY
             }
         }
 
-        if (history?.owner && history.owner.startsWith('7656') && !inspectData?.ms?.startsWith('7656')) {
+        if (history?.owner && history.owner.toString().startsWith('7656') && !inspectData?.ms?.toString().startsWith('7656')) {
             return HistoryType.MARKET_LISTING
         }
 
@@ -409,10 +409,6 @@ export class InspectService implements OnModuleInit {
 
             const keychainChanges = this.detectKeychainChanges(response.keychains, history.keychains)
             if (keychainChanges) return keychainChanges
-        }
-
-        if (response.customname !== history.customName) {
-            return response.customname ? HistoryType.NAMETAG_ADDED : HistoryType.NAMETAG_REMOVED
         }
 
         return HistoryType.UNKNOWN
@@ -532,11 +528,11 @@ export class InspectService implements OnModuleInit {
             item.paintIndex || 0,
             item.paintWear || 0,
             item.defIndex || 0,
-            item.origin || 0,
-            item.rarity || 0,
-            item.questId || 0,
-            item.quality || 0,
-            item.dropReason || 0
+            // item.origin || 0,
+            // item.rarity || 0,
+            // item.questId || 0,
+            // item.quality || 0,
+            // item.dropReason || 0
         ]
         const stringToHash = values.join('-')
         return createHash('sha1').update(stringToHash).digest('hex').substring(0, 8)
