@@ -202,11 +202,11 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
                 DENSE_RANK() OVER(
                     PARTITION BY va.wear_category 
                     ORDER BY va."paint_wear" DESC
-                ) AS global_low_rank,
+                ) AS global_high_rank,
                 DENSE_RANK() OVER(
                     PARTITION BY va.wear_category
                     ORDER BY va."paint_wear" ASC
-                ) AS global_high_rank,
+                ) AS global_low_rank,
                 -- Item-specific rankings
                 DENSE_RANK() OVER(
                     PARTITION BY 
@@ -216,7 +216,7 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
                         va.is_souvenir,
                         va.wear_category
                     ORDER BY va."paint_wear" DESC
-                ) AS item_low_rank,
+                ) AS item_high_rank,
                 DENSE_RANK() OVER(
                     PARTITION BY 
                         va."paint_index", 
@@ -225,7 +225,7 @@ import { ViewEntity, ViewColumn, Index } from 'typeorm'
                         va.is_souvenir,
                         va.wear_category
                     ORDER BY va."paint_wear" ASC
-                ) AS item_high_rank,
+                ) AS item_low_rank,
                 -- Calculate percentiles
                 CASE
                     WHEN (va.max_wear - va.min_wear) = 0 THEN 0
