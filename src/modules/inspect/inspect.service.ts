@@ -195,12 +195,13 @@ export class InspectService implements OnModuleInit {
                 priority: query.lowPriority ? 'low' : 'normal'
             });
 
+            /*
             // TODO: Remove this once the maintenance is done
             reject(new HttpException(
                 'Inspection service is currently under maintenance, please try again later',
                 HttpStatus.SERVICE_UNAVAILABLE
-            ));
-            /*
+            )); 
+            */
 
             // Try using the worker manager
             this.workerManagerService.inspectItem(s, a, d, m, query.lowPriority ? 'low' : 'normal')
@@ -236,7 +237,6 @@ export class InspectService implements OnModuleInit {
                         HttpStatus.GATEWAY_TIMEOUT
                     ));
                 });
-                */
         });
     }
 

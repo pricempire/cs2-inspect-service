@@ -90,40 +90,76 @@ export class FixAssetModule {
                     WHERE old_unique_id != new_unique_id
                 ),
                 
-                -- Third CTE: Find which assets need to be deleted (duplicates)
-                assets_to_delete AS (
-                    SELECT ca.old_unique_id
+                -- Third CTE: Find assets where new_unique_id already exists in another asset
+                potential_conflicts AS (
+                    SELECT 
+                        ca.asset_id,
+                        ca.old_unique_id,
+                        ca.new_unique_id,
+                        EXISTS (
+                            SELECT 1 FROM "asset" a
+                            WHERE a.unique_id = ca.new_unique_id
+                            AND a.unique_id != ca.old_unique_id
+                        ) AS has_conflict
                     FROM changed_assets ca
-                    WHERE EXISTS (
-                        SELECT 1 FROM "asset" 
-                        WHERE unique_id = ca.new_unique_id
-                        AND unique_id != ca.old_unique_id
-                    )
                 ),
                 
-                -- Fourth CTE: Delete the duplicate assets and return count
+                -- Fourth CTE: Identify assets to keep (newer asset_id) and delete (older asset_id) to resolve conflicts
+                conflict_resolution AS (
+                    SELECT 
+                        a.asset_id AS keep_asset_id,
+                        a.unique_id AS keep_unique_id,
+                        pc.asset_id AS delete_asset_id,
+                        pc.old_unique_id AS delete_unique_id
+                    FROM potential_conflicts pc
+                    JOIN "asset" a ON a.unique_id = pc.new_unique_id
+                    WHERE pc.has_conflict = true
+                    AND a.asset_id > pc.asset_id  -- Keep the newer asset based on asset_id
+                ),
+                
+                -- Fifth CTE: Delete older conflicting assets
                 deleted_assets AS (
                     DELETE FROM "asset"
-                    WHERE unique_id IN (SELECT old_unique_id FROM assets_to_delete)
+                    WHERE asset_id IN (SELECT delete_asset_id FROM conflict_resolution)
+                    OR unique_id IN (
+                        -- Also delete any asset whose unique_id would conflict after update
+                        SELECT old_unique_id 
+                        FROM changed_assets ca
+                        WHERE EXISTS (
+                            SELECT 1 FROM "asset" a 
+                            WHERE a.unique_id = ca.new_unique_id
+                            AND a.asset_id != ca.asset_id
+                        )
+                    )
                     RETURNING asset_id
                 ),
                 
-                -- Fifth CTE: Update assets that need new unique_ids (non-duplicates)
+                -- Sixth CTE: Get all non-conflicting changed assets
+                safe_to_update AS (
+                    SELECT ca.asset_id, ca.old_unique_id, ca.new_unique_id
+                    FROM changed_assets ca
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM "asset" a
+                        WHERE a.unique_id = ca.new_unique_id
+                        AND a.asset_id != ca.asset_id
+                    )
+                ),
+                
+                -- Seventh CTE: Update safe assets with new unique_ids
                 updated_assets AS (
                     UPDATE "asset" a
-                    SET unique_id = ca.new_unique_id
-                    FROM changed_assets ca
-                    WHERE a.unique_id = ca.old_unique_id
-                    AND NOT EXISTS (SELECT 1 FROM assets_to_delete atd WHERE atd.old_unique_id = ca.old_unique_id)
+                    SET unique_id = stu.new_unique_id
+                    FROM safe_to_update stu
+                    WHERE a.asset_id = stu.asset_id
                     RETURNING a.asset_id
                 ),
                 
-                -- Sixth CTE: Update history records with new unique_ids
+                -- Eighth CTE: Update history records with new unique_ids for safe assets
                 updated_history AS (
                     UPDATE "history" h
-                    SET unique_id = ca.new_unique_id
-                    FROM changed_assets ca
-                    WHERE h.unique_id = ca.old_unique_id
+                    SET unique_id = stu.new_unique_id
+                    FROM safe_to_update stu
+                    WHERE h.unique_id = stu.old_unique_id
                     RETURNING h.id
                 )
                 
