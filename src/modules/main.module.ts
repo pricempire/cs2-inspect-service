@@ -1,4 +1,4 @@
-import { Logger, Module } from '@nestjs/common'
+import { Logger, Module, OnModuleInit } from '@nestjs/common'
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm'
 import { InspectModule } from './inspect/inspect.module'
@@ -25,14 +25,14 @@ import { AddCharmsGin1745363888409 } from 'src/migrations/1745363888409-add_char
                 AddStickerGin1745363608133,
                 AddCharmsGin1745363888409,
             ],
-            migrationsRun: true,
+            migrationsRun: false,
             synchronize: true,
         }),
         InspectModule,
         ScheduleModule.forRoot(),
     ],
 })
-export class MainModule {
+export class MainModule implements OnModuleInit {
     constructor() {
         if (!process.env.POSTGRESQL_HOST) {
             throw new Error('POSTGRESQL_HOST is not defined')
@@ -77,5 +77,13 @@ export class MainModule {
         )
 
         this.isRunning = false;
+    }
+
+    onModuleInit() {
+        // run migrations
+        setTimeout(() => {
+            this.logger.debug('Running migrations')
+            this.dataSource.runMigrations()
+        }, 5000)
     }
 }
