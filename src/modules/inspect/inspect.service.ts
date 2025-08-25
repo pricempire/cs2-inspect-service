@@ -20,7 +20,7 @@ import { WorkerManagerService } from './worker/worker-manager.service'
 export class InspectService implements OnModuleInit {
     private readonly logger = new Logger(InspectService.name)
     private startTime: number = Date.now()
-    private readonly QUEUE_TIMEOUT = parseInt(process.env.QUEUE_TIMEOUT || '10000') // 5 seconds timeout
+    private readonly QUEUE_TIMEOUT = parseInt(process.env.QUEUE_TIMEOUT || '10000') // 10 seconds timeout
     private readonly MAX_QUEUE_SIZE = parseInt(process.env.MAX_QUEUE_SIZE || '100')
 
     private inspects: Map<string, {
